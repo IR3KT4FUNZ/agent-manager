@@ -1,3 +1,9 @@
 # Local design docs — not part of the published repo yet
 DESIGN.md
 V0-HANDOFF.md
+
+node_modules/
+dist/
+.DS_Store
+*.local
+.context/
