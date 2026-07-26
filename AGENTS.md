@@ -23,3 +23,9 @@ This is a TypeScript monorepo managed with **Bun workspaces** (no Turborepo/Nx).
 ### Shared
 
 - **`packages/shared`** — types shared between server and frontend.
+
+## Decisions & Gotchas
+
+- **Use `bun-pty`, not `node-pty`.** node-pty's spawn-helper fails under Bun (`posix_spawnp failed`). bun-pty is a Rust/NAPI port with the same API surface (`spawn`, `onData`, `onExit`, `resize`, `kill`).
+- Each session (`apps/server/src/sessions.ts`) is one PTY process with an in-memory scrollback buffer (~400 KB) replayed to every new WebSocket subscriber, so reattaching shows history.
+- The WS protocol lives in `packages/shared` (`ClientMessage` / `ServerMessage`). Clients should send `ping` every 30 s to stay under Bun's WebSocket idle timeout.
