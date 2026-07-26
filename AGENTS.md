@@ -12,6 +12,8 @@ Write code that is so self-documenting it does not need comments: clear names, s
 
 Every PR is scoped to a single feature or change. Keep them simple enough that the description is usually 2–3 short bullet points, and those bullets completely convey the goal of the PR to reviewers. If a PR needs more than that to explain, it is doing too much — split it.
 
+Agents never merge PRs. Open the PR, report it, and stop — a human reviews and merges.
+
 ## Tech Stack
 
 This is a TypeScript monorepo managed with **Bun workspaces** (no Turborepo/Nx).
