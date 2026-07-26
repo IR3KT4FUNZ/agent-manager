@@ -1,0 +1,17 @@
+{
+  "name": "@agent-manager/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agent-manager/shared": "workspace:*",
+    "hono": "^4.12.31"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14"
+  }
+}
