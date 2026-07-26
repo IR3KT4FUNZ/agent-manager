@@ -9,6 +9,11 @@ cd "$(dirname "$0")/.."
 command -v bun >/dev/null || { echo "error: bun is required — https://bun.sh" >&2; exit 1; }
 command -v cargo >/dev/null || { echo "error: the Rust toolchain is required — https://rustup.rs" >&2; exit 1; }
 
+if [[ "${1:-}" != "--desktop" ]] && curl -sf http://localhost:3001/api/health >/dev/null 2>&1; then
+  echo "Agent Manager is already running (server on port 3001) — not launching a second instance."
+  exit 0
+fi
+
 echo "==> Installing dependencies"
 bun install
 
