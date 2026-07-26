@@ -1,14 +1,29 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
+import { APP_NAME } from "@agent-manager/shared";
 import { Sidebar } from "./components/Sidebar";
 import { SessionTerminal } from "./components/SessionTerminal";
 
+const isTauri = "__TAURI_INTERNALS__" in window;
+
 const rootRoute = createRootRoute({
   component: () => (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100">
-      <Sidebar />
-      <main className="min-w-0 flex-1">
-        <Outlet />
-      </main>
+    <div className="flex h-screen flex-col bg-zinc-950 text-zinc-100">
+      {isTauri && (
+        <header
+          data-tauri-drag-region
+          className="flex h-9 shrink-0 items-center justify-center border-b border-zinc-800 bg-zinc-900"
+        >
+          <span className="pointer-events-none text-xs font-medium text-zinc-500 select-none">
+            {APP_NAME}
+          </span>
+        </header>
+      )}
+      <div className="flex min-h-0 flex-1">
+        <Sidebar />
+        <main className="min-w-0 flex-1">
+          <Outlet />
+        </main>
+      </div>
     </div>
   ),
 });
