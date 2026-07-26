@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@agent-manager/shared": "workspace:*",
+    "bun-pty": "^0.4.10",
     "hono": "^4.12.31"
   },
   "devDependencies": {
