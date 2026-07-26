@@ -32,6 +32,10 @@ This is a TypeScript monorepo managed with **Bun workspaces** (no Turborepo/Nx).
 - **Tailwind v4 + shadcn/ui** — styling and UI primitives.
 - **xterm.js** — terminal rendering (PTY handling lives on the Bun side).
 
+### Desktop
+
+- **Tauri v2** (`apps/desktop`) — macOS native shell wrapping the web frontend. `bun run --cwd apps/desktop dev` boots the server, Vite, and the native window together; `scripts/setup.sh --desktop` builds the `.app` bundle.
+
 ### Shared
 
 - **`packages/shared`** — types shared between server and frontend.
@@ -42,3 +46,6 @@ This is a TypeScript monorepo managed with **Bun workspaces** (no Turborepo/Nx).
 - Each session (`apps/server/src/sessions.ts`) is one PTY process with an in-memory scrollback buffer (~400 KB) replayed to every new WebSocket subscriber, so reattaching shows history.
 - The WS protocol lives in `packages/shared` (`ClientMessage` / `ServerMessage`). Clients should send `ping` every 30 s to stay under Bun's WebSocket idle timeout.
 - **Never proxy WebSockets through Vite.** Vite runs under Bun (`bun run` shims `node` to Bun), and Vite's WS proxy calls `net.Socket#destroySoon`, which Bun doesn't implement — the first proxied WS request crashes the dev server. Only `/api` (HTTP) goes through the Vite proxy; the frontend opens WebSockets directly to `ws://localhost:3001` in dev (see `SessionTerminal.tsx`).
+- Only `apps/desktop/app-icon.png` is committed; `src-tauri/icons/` is generated from it by `scripts/setup.sh` and gitignored.
+- Tauri bundle targets are `["app"]` only — the DMG bundler scripts Finder via AppleScript and fails in non-interactive shells.
+- The packaged `.app` does not yet bundle the Bun server as a sidecar; it expects `bun run start` running separately. Dev mode (`tauri dev`) is fully self-contained.
