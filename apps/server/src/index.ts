@@ -16,16 +16,16 @@ app.get("/api/sessions", (c) => c.json(manager.list()));
 app.post("/api/sessions", async (c) => {
   const request = (await c.req.json().catch(() => ({}))) as CreateSessionRequest;
   try {
-    const session = manager.create(request);
+    const session = await manager.create(request);
     return c.json(session.info(), 201);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
   }
 });
 
-app.delete("/api/sessions/:id", (c) => {
+app.delete("/api/sessions/:id", async (c) => {
   const id = c.req.param("id") ?? "";
-  if (!manager.dispose(id)) return c.json({ error: "session not found" }, 404);
+  if (!(await manager.dispose(id))) return c.json({ error: "session not found" }, 404);
   return c.json({ ok: true });
 });
 

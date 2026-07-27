@@ -111,7 +111,14 @@ export function Sidebar() {
                 session.status === "running" ? "bg-emerald-500" : "bg-zinc-600"
               }`}
             />
-            <span className="min-w-0 flex-1 truncate">{session.title}</span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate">{session.title}</span>
+              {session.worktree && (
+                <span className="truncate text-xs text-zinc-500">
+                  ⑂ {session.worktree.branch}
+                </span>
+              )}
+            </span>
             <button
               onClick={(event) => {
                 event.preventDefault();
