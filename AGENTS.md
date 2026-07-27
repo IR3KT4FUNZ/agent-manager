@@ -8,6 +8,10 @@ This file is the shared knowledge base for all coding agents working in this rep
 
 Write code that is so self-documenting it does not need comments: clear names, small functions, and obvious control flow instead of prose explaining unclear code. Do not write comments by default — only add them when the prompter asks for them or judges one necessary.
 
+### Testing
+
+Testing matters: features should be rigorously covered by both unit tests and integration tests. But the quality of the test suite matters just as much as its existence. Avoid redundant tests and bloated tests. Each test should target a specific portion of code with clear intent, and it should be simpler than the code it exercises — if a test is harder to follow than what it verifies, rethink it.
+
 ### Pull Requests
 
 Every PR is scoped to a single feature or change. Keep them simple enough that the description is usually 2–3 short bullet points, and those bullets completely convey the goal of the PR to reviewers. If a PR needs more than that to explain, it is doing too much — split it.
