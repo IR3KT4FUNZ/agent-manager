@@ -2,8 +2,7 @@ import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/re
 import { APP_NAME } from "@agent-manager/shared";
 import { Sidebar } from "./components/Sidebar";
 import { SessionTerminal } from "./components/SessionTerminal";
-
-const isTauri = "__TAURI_INTERNALS__" in window;
+import { isTauri } from "./lib/platform";
 
 const rootRoute = createRootRoute({
   component: () => (

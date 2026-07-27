@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { createSession, deleteSession, listSessions } from "../lib/api";
+import { isTauri } from "../lib/platform";
 
 export function Sidebar() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [pickingDirectory, setPickingDirectory] = useState(false);
+  const [directory, setDirectory] = useState("");
 
   const { data: sessions = [] } = useQuery({
     queryKey: ["sessions"],
@@ -13,9 +17,11 @@ export function Sidebar() {
   });
 
   const create = useMutation({
-    mutationFn: () => createSession({}),
+    mutationFn: (cwd?: string) => createSession(cwd ? { cwd } : {}),
     onSuccess: (session) => {
       queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      setPickingDirectory(false);
+      setDirectory("");
       navigate({ to: "/sessions/$sessionId", params: { sessionId: session.id } });
     },
   });
@@ -28,20 +34,67 @@ export function Sidebar() {
     },
   });
 
+  async function startNewSession() {
+    if (isTauri) {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({ directory: true, title: "Choose a project folder" });
+      if (typeof selected === "string") create.mutate(selected);
+    } else {
+      setPickingDirectory(true);
+    }
+  }
+
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900">
       <div className="border-b border-zinc-800 px-4 py-3 text-sm font-semibold tracking-wide">
         Agent Manager
       </div>
 
-      <div className="p-3">
-        <button
-          onClick={() => create.mutate()}
-          disabled={create.isPending}
-          className="w-full rounded-md bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-white disabled:opacity-50"
-        >
-          {create.isPending ? "Starting…" : "New Claude session"}
-        </button>
+      <div className="space-y-2 p-3">
+        {pickingDirectory ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              create.mutate(directory.trim() || undefined);
+            }}
+            className="space-y-2"
+          >
+            <input
+              autoFocus
+              value={directory}
+              onChange={(event) => setDirectory(event.target.value)}
+              placeholder="~/path/to/project"
+              className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+            />
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={create.isPending}
+                className="flex-1 rounded-md bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-white disabled:opacity-50"
+              >
+                {create.isPending ? "Starting…" : "Start"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickingDirectory(false)}
+                className="rounded-md px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            onClick={startNewSession}
+            disabled={create.isPending}
+            className="w-full rounded-md bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-white disabled:opacity-50"
+          >
+            {create.isPending ? "Starting…" : "New Claude session"}
+          </button>
+        )}
+        {create.isError && (
+          <p className="text-xs text-red-400">{(create.error as Error).message}</p>
+        )}
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
