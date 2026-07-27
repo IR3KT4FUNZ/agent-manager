@@ -1,5 +1,11 @@
 export const APP_NAME = "Agent Manager";
 
+export interface WorktreeInfo {
+  path: string;
+  branch: string;
+  repoRoot: string;
+}
+
 export interface SessionInfo {
   id: string;
   title: string;
@@ -8,6 +14,7 @@ export interface SessionInfo {
   status: "running" | "exited";
   exitCode: number | null;
   createdAt: string;
+  worktree?: WorktreeInfo;
 }
 
 export interface CreateSessionRequest {

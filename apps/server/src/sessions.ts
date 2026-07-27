@@ -3,11 +3,31 @@ import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import type { CreateSessionRequest, ServerMessage, SessionInfo } from "@agent-manager/shared";
+import type {
+  CreateSessionRequest,
+  ServerMessage,
+  SessionInfo,
+  WorktreeInfo,
+} from "@agent-manager/shared";
+import {
+  createWorktree,
+  discardWorktree,
+  removeWorktree,
+  repoHasCommits,
+  resolveRepoRoot,
+} from "./worktrees";
 
 const SCROLLBACK_LIMIT = 400_000;
 
 type Subscriber = (message: ServerMessage) => void;
+
+interface ResolvedSession {
+  command: string;
+  args: string[];
+  cwd: string;
+  title: string;
+  worktree?: WorktreeInfo;
+}
 
 function resolveCwd(cwd?: string): string {
   if (!cwd) return homedir();
@@ -19,12 +39,33 @@ function resolveCwd(cwd?: string): string {
   return expanded;
 }
 
+async function resolveSession(request: CreateSessionRequest): Promise<ResolvedSession> {
+  const command = request.command ?? "claude";
+  const args = request.args ?? [];
+  const dir = resolveCwd(request.cwd);
+
+  const repoRoot = await resolveRepoRoot(dir);
+  let cwd = dir;
+  let worktree: WorktreeInfo | undefined;
+  if (repoRoot) {
+    if (!(await repoHasCommits(repoRoot))) {
+      throw new Error("Repository has no commits yet; make an initial commit first.");
+    }
+    worktree = await createWorktree(repoRoot);
+    cwd = worktree.path;
+  }
+
+  const title = request.title ?? `${basename(command)} · ${basename(cwd)}`;
+  return { command, args, cwd, title, worktree };
+}
+
 export class Session {
   readonly id = randomUUID();
   readonly createdAt = new Date().toISOString();
   readonly command: string;
   readonly cwd: string;
   readonly title: string;
+  readonly worktree?: WorktreeInfo;
   status: "running" | "exited" = "running";
   exitCode: number | null = null;
 
@@ -32,12 +73,13 @@ export class Session {
   private subscribers = new Set<Subscriber>();
   private pty: ReturnType<typeof spawn>;
 
-  constructor(request: CreateSessionRequest) {
-    this.command = request.command ?? "claude";
-    this.cwd = resolveCwd(request.cwd);
-    this.title = request.title ?? `${basename(this.command)} · ${basename(this.cwd)}`;
+  constructor(resolved: ResolvedSession) {
+    this.command = resolved.command;
+    this.cwd = resolved.cwd;
+    this.title = resolved.title;
+    this.worktree = resolved.worktree;
 
-    this.pty = spawn(this.command, request.args ?? [], {
+    this.pty = spawn(this.command, resolved.args, {
       name: "xterm-256color",
       cols: 80,
       rows: 24,
@@ -66,6 +108,7 @@ export class Session {
       status: this.status,
       exitCode: this.exitCode,
       createdAt: this.createdAt,
+      worktree: this.worktree,
     };
   }
 
@@ -97,8 +140,15 @@ export class Session {
 export class SessionManager {
   private sessions = new Map<string, Session>();
 
-  create(request: CreateSessionRequest): Session {
-    const session = new Session(request);
+  async create(request: CreateSessionRequest): Promise<Session> {
+    const resolved = await resolveSession(request);
+    let session: Session;
+    try {
+      session = new Session(resolved);
+    } catch (error) {
+      if (resolved.worktree) await discardWorktree(resolved.worktree).catch(() => {});
+      throw error;
+    }
     this.sessions.set(session.id, session);
     return session;
   }
@@ -111,11 +161,16 @@ export class SessionManager {
     return [...this.sessions.values()].map((session) => session.info());
   }
 
-  dispose(id: string): boolean {
+  async dispose(id: string): Promise<boolean> {
     const session = this.sessions.get(id);
     if (!session) return false;
     session.dispose();
     this.sessions.delete(id);
+    if (session.worktree) {
+      await removeWorktree(session.worktree).catch((error) => {
+        console.warn(`failed to remove worktree for session ${id}:`, error);
+      });
+    }
     return true;
   }
 }
