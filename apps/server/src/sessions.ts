@@ -1,12 +1,23 @@
 import { spawn } from "bun-pty";
 import { randomUUID } from "node:crypto";
+import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import type { CreateSessionRequest, ServerMessage, SessionInfo } from "@agent-manager/shared";
 
 const SCROLLBACK_LIMIT = 400_000;
 
 type Subscriber = (message: ServerMessage) => void;
+
+function resolveCwd(cwd?: string): string {
+  if (!cwd) return homedir();
+  const expanded =
+    cwd === "~" ? homedir() : cwd.startsWith("~/") ? join(homedir(), cwd.slice(2)) : cwd;
+  if (!existsSync(expanded) || !statSync(expanded).isDirectory()) {
+    throw new Error(`Not a directory: ${expanded}`);
+  }
+  return expanded;
+}
 
 export class Session {
   readonly id = randomUUID();
@@ -23,7 +34,7 @@ export class Session {
 
   constructor(request: CreateSessionRequest) {
     this.command = request.command ?? "claude";
-    this.cwd = request.cwd ?? homedir();
+    this.cwd = resolveCwd(request.cwd);
     this.title = request.title ?? `${basename(this.command)} · ${basename(this.cwd)}`;
 
     this.pty = spawn(this.command, request.args ?? [], {

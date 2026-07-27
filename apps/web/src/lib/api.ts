@@ -1,7 +1,14 @@
 import type { CreateSessionRequest, SessionInfo } from "@agent-manager/shared";
 
 async function json<T>(response: Response): Promise<T> {
-  if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+  if (!response.ok) {
+    const body = await response.text();
+    let message = `${response.status} ${body}`;
+    try {
+      message = (JSON.parse(body) as { error?: string }).error ?? message;
+    } catch {}
+    throw new Error(message);
+  }
   return response.json() as Promise<T>;
 }
 
