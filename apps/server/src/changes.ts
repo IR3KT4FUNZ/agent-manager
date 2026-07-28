@@ -151,7 +151,10 @@ export async function openDiffInZed(worktree: WorktreeInfo, relPath: string): Pr
     writeFileSync(newSide, new Uint8Array());
   }
 
-  Bun.spawn([zed, "--diff", oldSide, newSide], {
+  // --add opens the diff as a tab in the currently focused Zed window (reusing an
+  // already-open window) instead of spawning a new one; it still opens a window when
+  // none is running.
+  Bun.spawn([zed, "--add", "--diff", oldSide, newSide], {
     stdin: "ignore",
     stdout: "ignore",
     stderr: "ignore",
