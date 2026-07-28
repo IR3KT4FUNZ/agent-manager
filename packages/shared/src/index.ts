@@ -24,6 +24,22 @@ export interface CreateSessionRequest {
   title?: string;
 }
 
+export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "untracked";
+
+export interface ChangeEntry {
+  path: string;
+  status: ChangeStatus;
+}
+
+export interface SessionChanges {
+  base: string;
+  files: ChangeEntry[];
+}
+
+export interface OpenDiffRequest {
+  path: string;
+}
+
 export type ClientMessage =
   | { type: "input"; data: string }
   | { type: "resize"; cols: number; rows: number }

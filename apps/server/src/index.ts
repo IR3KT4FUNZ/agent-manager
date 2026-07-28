@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { createBunWebSocket, serveStatic } from "hono/bun";
 import type { ServerWebSocket } from "bun";
-import type { ClientMessage, CreateSessionRequest } from "@agent-manager/shared";
+import type { ClientMessage, CreateSessionRequest, OpenDiffRequest } from "@agent-manager/shared";
 import { SessionManager } from "./sessions";
+import { listChanges, openDiffInZed } from "./changes";
 
 const manager = new SessionManager();
 const { upgradeWebSocket, websocket } = createBunWebSocket<ServerWebSocket>();
@@ -27,6 +28,31 @@ app.delete("/api/sessions/:id", async (c) => {
   const id = c.req.param("id") ?? "";
   if (!(await manager.dispose(id))) return c.json({ error: "session not found" }, 404);
   return c.json({ ok: true });
+});
+
+app.get("/api/sessions/:id/changes", async (c) => {
+  const session = manager.get(c.req.param("id") ?? "");
+  if (!session) return c.json({ error: "session not found" }, 404);
+  if (!session.worktree) return c.json({ base: "", files: [] });
+  try {
+    return c.json(await listChanges(session.worktree));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+  }
+});
+
+app.post("/api/sessions/:id/open-diff", async (c) => {
+  const session = manager.get(c.req.param("id") ?? "");
+  if (!session) return c.json({ error: "session not found" }, 404);
+  if (!session.worktree) return c.json({ error: "session has no git worktree" }, 400);
+  const { path } = (await c.req.json().catch(() => ({}))) as OpenDiffRequest;
+  if (!path) return c.json({ error: "missing path" }, 400);
+  try {
+    await openDiffInZed(session.worktree, path);
+    return c.json({ ok: true });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+  }
 });
 
 app.get(
