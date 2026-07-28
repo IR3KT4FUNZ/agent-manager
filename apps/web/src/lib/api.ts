@@ -1,4 +1,4 @@
-import type { CreateSessionRequest, SessionInfo } from "@agent-manager/shared";
+import type { CreateSessionRequest, SessionChanges, SessionInfo } from "@agent-manager/shared";
 
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -26,4 +26,16 @@ export function createSession(request: CreateSessionRequest): Promise<SessionInf
 
 export function deleteSession(id: string): Promise<void> {
   return fetch(`/api/sessions/${id}`, { method: "DELETE" }).then((r) => json(r));
+}
+
+export function getSessionChanges(id: string): Promise<SessionChanges> {
+  return fetch(`/api/sessions/${id}/changes`).then((r) => json<SessionChanges>(r));
+}
+
+export function openDiffInZed(id: string, path: string): Promise<void> {
+  return fetch(`/api/sessions/${id}/open-diff`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path }),
+  }).then((r) => json(r));
 }

@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/re
 import { APP_NAME } from "@agent-manager/shared";
 import { Sidebar } from "./components/Sidebar";
 import { SessionTerminal } from "./components/SessionTerminal";
+import { ChangedFiles } from "./components/ChangedFiles";
 import { isTauri } from "./lib/platform";
 
 const rootRoute = createRootRoute({
@@ -45,7 +46,18 @@ const sessionRoute = createRoute({
 
 function SessionPage() {
   const { sessionId } = sessionRoute.useParams();
-  return <SessionTerminal key={sessionId} sessionId={sessionId} />;
+  return (
+    <div className="flex h-full min-w-0">
+      <ChangedFiles
+        key={`changes-${sessionId}`}
+        sessionId={sessionId}
+        className="w-72 shrink-0 border-r border-zinc-800"
+      />
+      <div className="min-w-0 flex-1">
+        <SessionTerminal key={sessionId} sessionId={sessionId} />
+      </div>
+    </div>
+  );
 }
 
 export const router = createRouter({

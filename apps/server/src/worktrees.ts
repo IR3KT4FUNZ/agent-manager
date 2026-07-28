@@ -22,7 +22,7 @@ export function generateWorkspaceName(): string {
   return `${pick(ADJECTIVES)}-${pick(NOUNS)}`;
 }
 
-async function runGit(
+export async function runGit(
   args: string[],
   cwd: string,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
