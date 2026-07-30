@@ -1,7 +1,15 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { createSession, deleteSession, listSessions } from "../lib/api";
+import type { SessionInfo } from "@agent-manager/shared";
+import {
+  closeProject,
+  createSession,
+  deleteSession,
+  listProjects,
+  listSessions,
+  openProject,
+} from "../lib/api";
 import { isTauri } from "../lib/platform";
 
 export function Sidebar() {
@@ -10,35 +18,68 @@ export function Sidebar() {
   const [pickingDirectory, setPickingDirectory] = useState(false);
   const [directory, setDirectory] = useState("");
 
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects"],
+    queryFn: listProjects,
+    refetchInterval: 5_000,
+  });
+
   const { data: sessions = [] } = useQuery({
     queryKey: ["sessions"],
     queryFn: listSessions,
     refetchInterval: 5_000,
   });
 
-  const create = useMutation({
-    mutationFn: (cwd?: string) => createSession(cwd ? { cwd } : {}),
+  function refresh() {
+    queryClient.invalidateQueries({ queryKey: ["projects"] });
+    queryClient.invalidateQueries({ queryKey: ["sessions"] });
+  }
+
+  function openSession(session: SessionInfo) {
+    refresh();
+    navigate({ to: "/sessions/$sessionId", params: { sessionId: session.id } });
+  }
+
+  const open = useMutation({
+    mutationFn: async (path?: string) => {
+      const project = await openProject(path);
+      return createSession({ projectId: project.id });
+    },
     onSuccess: (session) => {
-      queryClient.invalidateQueries({ queryKey: ["sessions"] });
       setPickingDirectory(false);
       setDirectory("");
-      navigate({ to: "/sessions/$sessionId", params: { sessionId: session.id } });
+      openSession(session);
+    },
+  });
+
+  const addSession = useMutation({
+    mutationFn: (projectId: string) => createSession({ projectId }),
+    onSuccess: openSession,
+  });
+
+  const close = useMutation({
+    mutationFn: closeProject,
+    onSuccess: () => {
+      refresh();
+      navigate({ to: "/" });
     },
   });
 
   const remove = useMutation({
     mutationFn: deleteSession,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      refresh();
       navigate({ to: "/" });
     },
   });
 
-  async function startNewSession() {
+  const error = (open.error ?? addSession.error ?? close.error ?? remove.error) as Error | null;
+
+  async function startOpenProject() {
     if (isTauri) {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({ directory: true, title: "Choose a project folder" });
-      if (typeof selected === "string") create.mutate(selected);
+      const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
+      const selected = await openDialog({ directory: true, title: "Choose a project folder" });
+      if (typeof selected === "string") open.mutate(selected);
     } else {
       setPickingDirectory(true);
     }
@@ -51,7 +92,7 @@ export function Sidebar() {
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              create.mutate(directory.trim() || undefined);
+              open.mutate(directory.trim() || undefined);
             }}
             className="space-y-2"
           >
@@ -65,10 +106,10 @@ export function Sidebar() {
             <div className="flex gap-2">
               <button
                 type="submit"
-                disabled={create.isPending}
+                disabled={open.isPending}
                 className="flex-1 rounded-md bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-white disabled:opacity-50"
               >
-                {create.isPending ? "Starting…" : "Start"}
+                {open.isPending ? "Opening…" : "Open"}
               </button>
               <button
                 type="button"
@@ -81,52 +122,81 @@ export function Sidebar() {
           </form>
         ) : (
           <button
-            onClick={startNewSession}
-            disabled={create.isPending}
+            onClick={startOpenProject}
+            disabled={open.isPending}
             className="w-full rounded-md bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-white disabled:opacity-50"
           >
-            {create.isPending ? "Starting…" : "New project"}
+            {open.isPending ? "Opening…" : "New project"}
           </button>
         )}
-        {create.isError && (
-          <p className="text-xs text-red-400">{(create.error as Error).message}</p>
-        )}
+        {error && <p className="text-xs text-red-400">{error.message}</p>}
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
-        {sessions.map((session) => (
-          <Link
-            key={session.id}
-            to="/sessions/$sessionId"
-            params={{ sessionId: session.id }}
-            className="group flex items-center gap-2 rounded-md px-2 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-            activeProps={{ className: "bg-zinc-800 text-zinc-100" }}
-          >
-            <span
-              className={`size-2 shrink-0 rounded-full ${
-                session.status === "running" ? "bg-emerald-500" : "bg-zinc-600"
-              }`}
-            />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate">{session.title}</span>
-              {session.worktree && (
-                <span className="truncate text-xs text-zinc-500">
-                  ⑂ {session.worktree.branch}
+      <nav className="flex-1 space-y-4 overflow-y-auto px-2 pb-3">
+        {projects.map((project) => {
+          const projectSessions = sessions.filter((session) => session.projectId === project.id);
+          return (
+            <div key={project.id} className="space-y-1">
+              <div className="group flex items-center gap-1 px-2">
+                <span
+                  className="truncate text-xs font-semibold tracking-wide text-zinc-500 uppercase"
+                  title={project.path}
+                >
+                  {project.name}
                 </span>
+                <span className="flex-1" />
+                <button
+                  onClick={() => addSession.mutate(project.id)}
+                  disabled={addSession.isPending}
+                  className="hidden shrink-0 rounded px-1 text-zinc-500 hover:text-zinc-100 group-hover:block disabled:opacity-50"
+                  title="New session in this project"
+                >
+                  +
+                </button>
+                <button
+                  onClick={() => close.mutate(project.id)}
+                  className="hidden shrink-0 rounded px-1 text-zinc-500 hover:text-red-400 group-hover:block"
+                  title="Close project and kill its sessions"
+                >
+                  ×
+                </button>
+              </div>
+
+              {projectSessions.length === 0 ? (
+                <p className="px-2 py-1 text-xs text-zinc-600">No sessions yet</p>
+              ) : (
+                projectSessions.map((session) => (
+                  <Link
+                    key={session.id}
+                    to="/sessions/$sessionId"
+                    params={{ sessionId: session.id }}
+                    className="group flex items-center gap-2 rounded-md px-2 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                    activeProps={{ className: "bg-zinc-800 text-zinc-100" }}
+                  >
+                    <span
+                      className={`size-2 shrink-0 rounded-full ${
+                        session.status === "running" ? "bg-emerald-500" : "bg-zinc-600"
+                      }`}
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      {session.worktree ? `⑂ ${session.title}` : session.title}
+                    </span>
+                    <button
+                      onClick={(event) => {
+                        event.preventDefault();
+                        remove.mutate(session.id);
+                      }}
+                      className="hidden shrink-0 rounded px-1 text-zinc-500 hover:text-red-400 group-hover:block"
+                      title="Kill session"
+                    >
+                      ×
+                    </button>
+                  </Link>
+                ))
               )}
-            </span>
-            <button
-              onClick={(event) => {
-                event.preventDefault();
-                remove.mutate(session.id);
-              }}
-              className="hidden shrink-0 rounded px-1 text-zinc-500 hover:text-red-400 group-hover:block"
-              title="Kill session"
-            >
-              ×
-            </button>
-          </Link>
-        ))}
+            </div>
+          );
+        })}
       </nav>
     </aside>
   );

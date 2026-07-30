@@ -1,10 +1,17 @@
 import { Hono } from "hono";
 import { createBunWebSocket, serveStatic } from "hono/bun";
 import type { ServerWebSocket } from "bun";
-import type { ClientMessage, CreateSessionRequest, OpenDiffRequest } from "@agent-manager/shared";
+import type {
+  ClientMessage,
+  CreateSessionRequest,
+  OpenDiffRequest,
+  OpenProjectRequest,
+} from "@agent-manager/shared";
+import { ProjectManager } from "./projects";
 import { SessionManager } from "./sessions";
 import { listChanges, openDiffInZed } from "./changes";
 
+const projects = new ProjectManager();
 const manager = new SessionManager();
 const { upgradeWebSocket, websocket } = createBunWebSocket<ServerWebSocket>();
 
@@ -12,12 +19,34 @@ const app = new Hono();
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
+app.get("/api/projects", (c) => c.json(projects.list()));
+
+app.post("/api/projects", async (c) => {
+  const { path } = (await c.req.json().catch(() => ({}))) as OpenProjectRequest;
+  try {
+    const project = await projects.open(path);
+    return c.json(project.info(), 201);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+  }
+});
+
+app.delete("/api/projects/:id", async (c) => {
+  const id = c.req.param("id") ?? "";
+  if (!projects.get(id)) return c.json({ error: "project not found" }, 404);
+  await manager.disposeProject(id);
+  projects.close(id);
+  return c.json({ ok: true });
+});
+
 app.get("/api/sessions", (c) => c.json(manager.list()));
 
 app.post("/api/sessions", async (c) => {
   const request = (await c.req.json().catch(() => ({}))) as CreateSessionRequest;
+  const project = projects.get(request.projectId ?? "");
+  if (!project) return c.json({ error: "project not found" }, 404);
   try {
-    const session = await manager.create(request);
+    const session = await manager.create(project, request);
     return c.json(session.info(), 201);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);

@@ -1,27 +1,21 @@
 import { spawn } from "bun-pty";
 import { randomUUID } from "node:crypto";
-import { existsSync, statSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import type {
   CreateSessionRequest,
   ServerMessage,
   SessionInfo,
   WorktreeInfo,
 } from "@agent-manager/shared";
-import {
-  createWorktree,
-  discardWorktree,
-  removeWorktree,
-  repoHasCommits,
-  resolveRepoRoot,
-} from "./worktrees";
+import type { Project } from "./projects";
+import { createWorktree, discardWorktree, removeWorktree } from "./worktrees";
 
 const SCROLLBACK_LIMIT = 400_000;
 
 type Subscriber = (message: ServerMessage) => void;
 
 interface ResolvedSession {
+  projectId: string;
   command: string;
   args: string[];
   cwd: string;
@@ -29,39 +23,28 @@ interface ResolvedSession {
   worktree?: WorktreeInfo;
 }
 
-function resolveCwd(cwd?: string): string {
-  if (!cwd) return homedir();
-  const expanded =
-    cwd === "~" ? homedir() : cwd.startsWith("~/") ? join(homedir(), cwd.slice(2)) : cwd;
-  if (!existsSync(expanded) || !statSync(expanded).isDirectory()) {
-    throw new Error(`Not a directory: ${expanded}`);
-  }
-  return expanded;
-}
-
-async function resolveSession(request: CreateSessionRequest): Promise<ResolvedSession> {
+async function resolveSession(
+  project: Project,
+  request: CreateSessionRequest,
+): Promise<ResolvedSession> {
   const command = request.command ?? "claude";
   const args = request.args ?? [];
-  const dir = resolveCwd(request.cwd);
 
-  const repoRoot = await resolveRepoRoot(dir);
-  let cwd = dir;
+  let cwd = project.root;
   let worktree: WorktreeInfo | undefined;
-  if (repoRoot) {
-    if (!(await repoHasCommits(repoRoot))) {
-      throw new Error("Repository has no commits yet; make an initial commit first.");
-    }
-    worktree = await createWorktree(repoRoot);
+  if (project.repoRoot) {
+    worktree = await createWorktree(project.repoRoot);
     cwd = worktree.path;
   }
 
-  const title = request.title ?? `${basename(command)} · ${basename(cwd)}`;
-  return { command, args, cwd, title, worktree };
+  const title = request.title ?? worktree?.branch ?? `${basename(command)} · ${basename(cwd)}`;
+  return { projectId: project.id, command, args, cwd, title, worktree };
 }
 
 export class Session {
   readonly id = randomUUID();
   readonly createdAt = new Date().toISOString();
+  readonly projectId: string;
   readonly command: string;
   readonly cwd: string;
   readonly title: string;
@@ -74,6 +57,7 @@ export class Session {
   private pty: ReturnType<typeof spawn>;
 
   constructor(resolved: ResolvedSession) {
+    this.projectId = resolved.projectId;
     this.command = resolved.command;
     this.cwd = resolved.cwd;
     this.title = resolved.title;
@@ -102,6 +86,7 @@ export class Session {
   info(): SessionInfo {
     return {
       id: this.id,
+      projectId: this.projectId,
       title: this.title,
       command: this.command,
       cwd: this.cwd,
@@ -140,8 +125,8 @@ export class Session {
 export class SessionManager {
   private sessions = new Map<string, Session>();
 
-  async create(request: CreateSessionRequest): Promise<Session> {
-    const resolved = await resolveSession(request);
+  async create(project: Project, request: CreateSessionRequest): Promise<Session> {
+    const resolved = await resolveSession(project, request);
     let session: Session;
     try {
       session = new Session(resolved);
@@ -159,6 +144,13 @@ export class SessionManager {
 
   list(): SessionInfo[] {
     return [...this.sessions.values()].map((session) => session.info());
+  }
+
+  async disposeProject(projectId: string): Promise<void> {
+    const ids = [...this.sessions.values()]
+      .filter((session) => session.projectId === projectId)
+      .map((session) => session.id);
+    for (const id of ids) await this.dispose(id);
   }
 
   async dispose(id: string): Promise<boolean> {

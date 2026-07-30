@@ -6,8 +6,21 @@ export interface WorktreeInfo {
   repoRoot: string;
 }
 
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  path: string;
+  isRepo: boolean;
+  createdAt: string;
+}
+
+export interface OpenProjectRequest {
+  path?: string;
+}
+
 export interface SessionInfo {
   id: string;
+  projectId: string;
   title: string;
   command: string;
   cwd: string;
@@ -18,9 +31,9 @@ export interface SessionInfo {
 }
 
 export interface CreateSessionRequest {
+  projectId: string;
   command?: string;
   args?: string[];
-  cwd?: string;
   title?: string;
 }
 

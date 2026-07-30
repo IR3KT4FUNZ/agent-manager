@@ -39,7 +39,7 @@ const indexRoute = createRoute({
           className: "flex-1",
           content: (
             <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-              Create or select a session to get started
+              Open a project or select a session to get started
             </div>
           ),
         },
