@@ -3,6 +3,7 @@ import { APP_NAME } from "@agent-manager/shared";
 import { Sidebar } from "./components/Sidebar";
 import { SessionTerminal } from "./components/SessionTerminal";
 import { ChangedFiles } from "./components/ChangedFiles";
+import { PanelBoard } from "./components/PanelBoard";
 import { isTauri } from "./lib/platform";
 
 const rootRoute = createRootRoute({
@@ -19,10 +20,7 @@ const rootRoute = createRootRoute({
         </header>
       )}
       <div className="flex min-h-0 flex-1">
-        <Sidebar />
-        <main className="min-w-0 flex-1">
-          <Outlet />
-        </main>
+        <Outlet />
       </div>
     </div>
   ),
@@ -32,9 +30,20 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: () => (
-    <div className="flex h-full items-center justify-center text-sm text-zinc-500">
-      Create or select a session to get started
-    </div>
+    <PanelBoard
+      panels={[
+        { id: "sessions", className: "w-64 shrink-0", content: <Sidebar /> },
+        {
+          id: "chat",
+          className: "flex-1",
+          content: (
+            <div className="flex h-full items-center justify-center text-sm text-zinc-500">
+              Create or select a session to get started
+            </div>
+          ),
+        },
+      ]}
+    />
   ),
 });
 
@@ -47,16 +56,23 @@ const sessionRoute = createRoute({
 function SessionPage() {
   const { sessionId } = sessionRoute.useParams();
   return (
-    <div className="flex h-full min-w-0">
-      <ChangedFiles
-        key={`changes-${sessionId}`}
-        sessionId={sessionId}
-        className="w-72 shrink-0 border-r border-zinc-800"
-      />
-      <div className="min-w-0 flex-1">
-        <SessionTerminal key={sessionId} sessionId={sessionId} />
-      </div>
-    </div>
+    <PanelBoard
+      panels={[
+        { id: "sessions", className: "w-64 shrink-0", content: <Sidebar /> },
+        {
+          id: "changes",
+          className: "w-72 shrink-0",
+          content: (
+            <ChangedFiles key={`changes-${sessionId}`} sessionId={sessionId} className="h-full" />
+          ),
+        },
+        {
+          id: "chat",
+          className: "flex-1",
+          content: <SessionTerminal key={sessionId} sessionId={sessionId} />,
+        },
+      ]}
+    />
   );
 }
 
