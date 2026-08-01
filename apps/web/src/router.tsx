@@ -2,7 +2,7 @@ import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/re
 import { APP_NAME } from "@agent-manager/shared";
 import { Sidebar } from "./components/Sidebar";
 import { SessionTerminal } from "./components/SessionTerminal";
-import { ChangedFiles } from "./components/ChangedFiles";
+import { ChangedFiles, ChangedFilesBase } from "./components/ChangedFiles";
 import { PanelBoard } from "./components/PanelBoard";
 import { isTauri } from "./lib/platform";
 
@@ -32,9 +32,10 @@ const indexRoute = createRoute({
   component: () => (
     <PanelBoard
       panels={[
-        { id: "sessions", className: "w-64 shrink-0", content: <Sidebar /> },
+        { id: "sessions", title: "Sessions", className: "w-64 shrink-0", content: <Sidebar /> },
         {
           id: "chat",
+          title: "Chat",
           className: "flex-1",
           content: (
             <div className="flex h-full items-center justify-center text-sm text-zinc-500">
@@ -58,9 +59,11 @@ function SessionPage() {
   return (
     <PanelBoard
       panels={[
-        { id: "sessions", className: "w-64 shrink-0", content: <Sidebar /> },
+        { id: "sessions", title: "Sessions", className: "w-64 shrink-0", content: <Sidebar /> },
         {
           id: "changes",
+          title: "Changes",
+          headerRight: <ChangedFilesBase sessionId={sessionId} />,
           className: "w-72 shrink-0",
           content: (
             <ChangedFiles key={`changes-${sessionId}`} sessionId={sessionId} className="h-full" />
@@ -68,6 +71,7 @@ function SessionPage() {
         },
         {
           id: "chat",
+          title: "Chat",
           className: "flex-1",
           content: <SessionTerminal key={sessionId} sessionId={sessionId} />,
         },

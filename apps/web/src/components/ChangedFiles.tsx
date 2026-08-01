@@ -17,12 +17,26 @@ function splitPath(path: string): { dir: string; name: string } {
     : { dir: path.slice(0, idx + 1), name: path.slice(idx + 1) };
 }
 
-export function ChangedFiles({ sessionId, className }: { sessionId: string; className?: string }) {
-  const { data, isLoading } = useQuery({
+function useSessionChanges(sessionId: string) {
+  return useQuery({
     queryKey: ["changes", sessionId],
     queryFn: () => getSessionChanges(sessionId),
     refetchInterval: 3_000,
   });
+}
+
+export function ChangedFilesBase({ sessionId }: { sessionId: string }) {
+  const { data } = useSessionChanges(sessionId);
+  if (!data?.base) return null;
+  return (
+    <span className="truncate font-mono text-[10px] text-zinc-500" title={`vs ${data.base}`}>
+      vs {data.base}
+    </span>
+  );
+}
+
+export function ChangedFiles({ sessionId, className }: { sessionId: string; className?: string }) {
+  const { data, isLoading } = useSessionChanges(sessionId);
 
   const openDiff = useMutation({
     mutationFn: (path: string) => openDiffInZed(sessionId, path),
@@ -33,15 +47,6 @@ export function ChangedFiles({ sessionId, className }: { sessionId: string; clas
 
   return (
     <div className={`flex flex-col bg-zinc-900 ${className ?? ""}`}>
-      <div className="flex items-baseline justify-between border-b border-zinc-800 px-3 py-2">
-        <span className="text-xs font-semibold tracking-wide text-zinc-300">Changes</span>
-        {isGit && data?.base && (
-          <span className="truncate pl-2 font-mono text-[10px] text-zinc-500" title={`vs ${data.base}`}>
-            vs {data.base}
-          </span>
-        )}
-      </div>
-
       {openDiff.isError && (
         <p className="border-b border-zinc-800 px-3 py-2 text-xs text-rose-400">
           {(openDiff.error as Error).message}
