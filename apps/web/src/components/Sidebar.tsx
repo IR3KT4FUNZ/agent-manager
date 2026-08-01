@@ -148,14 +148,14 @@ export function Sidebar() {
                 <button
                   onClick={() => addSession.mutate(project.id)}
                   disabled={addSession.isPending}
-                  className="hidden shrink-0 rounded px-1 text-zinc-500 hover:text-zinc-100 group-hover:block disabled:opacity-50"
+                  className="shrink-0 rounded px-1 text-xs leading-none text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-zinc-100 disabled:text-zinc-700"
                   title="New session in this project"
                 >
                   +
                 </button>
                 <button
                   onClick={() => close.mutate(project.id)}
-                  className="hidden shrink-0 rounded px-1 text-zinc-500 hover:text-red-400 group-hover:block"
+                  className="shrink-0 rounded px-1 text-xs leading-none text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-400"
                   title="Close project and kill its sessions"
                 >
                   ×
@@ -186,7 +186,7 @@ export function Sidebar() {
                         event.preventDefault();
                         remove.mutate(session.id);
                       }}
-                      className="hidden shrink-0 rounded px-1 text-zinc-500 hover:text-red-400 group-hover:block"
+                      className="shrink-0 rounded px-1 leading-none text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-400"
                       title="Kill session"
                     >
                       ×
