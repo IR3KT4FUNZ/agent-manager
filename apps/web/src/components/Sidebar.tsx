@@ -46,10 +46,6 @@ export function Sidebar() {
 
   return (
     <aside className="flex h-full flex-col bg-zinc-900">
-      <div className="border-b border-zinc-800 px-4 py-3 text-sm font-semibold tracking-wide">
-        Agent Manager
-      </div>
-
       <div className="space-y-2 p-3">
         {pickingDirectory ? (
           <form
