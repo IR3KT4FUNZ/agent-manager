@@ -3,12 +3,13 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { ClientMessage, ServerMessage } from "@agent-manager/shared";
+import { sessionWsPath, terminalWsPath, wsUrl } from "../lib/ws";
 
 const wsBase = import.meta.env.DEV
   ? "ws://localhost:3001"
   : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
 
-export function SessionTerminal({ sessionId }: { sessionId: string }) {
+function TerminalPane({ url, autoFocus = true }: { url: string; autoFocus?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,7 +30,7 @@ export function SessionTerminal({ sessionId }: { sessionId: string }) {
     } catch {}
     fit.fit();
 
-    const ws = new WebSocket(`${wsBase}/ws/sessions/${sessionId}`);
+    const ws = new WebSocket(url);
     const send = (message: ClientMessage) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
     };
@@ -49,7 +50,7 @@ export function SessionTerminal({ sessionId }: { sessionId: string }) {
     });
     resizeObserver.observe(container);
     const keepalive = setInterval(() => send({ type: "ping" }), 30_000);
-    term.focus();
+    if (autoFocus) term.focus();
 
     return () => {
       clearInterval(keepalive);
@@ -58,7 +59,15 @@ export function SessionTerminal({ sessionId }: { sessionId: string }) {
       ws.close();
       term.dispose();
     };
-  }, [sessionId]);
+  }, [url, autoFocus]);
 
   return <div ref={containerRef} className="h-full w-full bg-[#09090b] p-2" />;
+}
+
+export function SessionTerminal({ sessionId }: { sessionId: string }) {
+  return <TerminalPane url={wsUrl(wsBase, sessionWsPath(sessionId))} />;
+}
+
+export function SessionShellTerminal({ sessionId }: { sessionId: string }) {
+  return <TerminalPane url={wsUrl(wsBase, terminalWsPath(sessionId))} autoFocus={false} />;
 }
