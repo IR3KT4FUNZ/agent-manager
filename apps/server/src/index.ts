@@ -1,11 +1,14 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { createBunWebSocket, serveStatic } from "hono/bun";
+import type { WSEvents } from "hono/ws";
 import type { ServerWebSocket } from "bun";
 import type {
   ClientMessage,
   CreateSessionRequest,
   OpenDiffRequest,
   OpenProjectRequest,
+  ServerMessage,
 } from "@agent-manager/shared";
 import { ProjectManager } from "./projects";
 import { SessionManager } from "./sessions";
@@ -84,35 +87,50 @@ app.post("/api/sessions/:id/open-diff", async (c) => {
   }
 });
 
-app.get(
-  "/ws/sessions/:id",
-  upgradeWebSocket((c) => {
-    const session = manager.get(c.req.param("id") ?? "");
+interface Attachable {
+  attach(subscriber: (message: ServerMessage) => void): () => void;
+  write(data: string): void;
+  resize(cols: number, rows: number): void;
+}
+
+function ptySocket(resolve: (c: Context) => Attachable | undefined) {
+  return (c: Context): WSEvents<ServerWebSocket> => {
+    const target = resolve(c);
     let unsubscribe: (() => void) | undefined;
     return {
       onOpen(_event, ws) {
-        if (!session) {
+        if (!target) {
           ws.close(4404, "session not found");
           return;
         }
-        unsubscribe = session.attach((message) => ws.send(JSON.stringify(message)));
+        unsubscribe = target.attach((message) => ws.send(JSON.stringify(message)));
       },
       onMessage(event) {
-        if (!session) return;
+        if (!target) return;
         let message: ClientMessage;
         try {
           message = JSON.parse(String(event.data)) as ClientMessage;
         } catch {
           return;
         }
-        if (message.type === "input") session.write(message.data);
-        else if (message.type === "resize") session.resize(message.cols, message.rows);
+        if (message.type === "input") target.write(message.data);
+        else if (message.type === "resize") target.resize(message.cols, message.rows);
       },
       onClose() {
         unsubscribe?.();
       },
     };
-  }),
+  };
+}
+
+app.get(
+  "/ws/sessions/:id",
+  upgradeWebSocket(ptySocket((c) => manager.get(c.req.param("id") ?? ""))),
+);
+
+app.get(
+  "/ws/sessions/:id/terminal",
+  upgradeWebSocket(ptySocket((c) => manager.get(c.req.param("id") ?? "")?.terminal())),
 );
 
 // In production the built web app is served by this same process.

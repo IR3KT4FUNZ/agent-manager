@@ -1,7 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
 import { APP_NAME } from "@agent-manager/shared";
 import { Sidebar } from "./components/Sidebar";
-import { SessionTerminal } from "./components/SessionTerminal";
+import { SessionShellTerminal, SessionTerminal } from "./components/SessionTerminal";
 import { ChangedFiles, ChangedFilesBase } from "./components/ChangedFiles";
 import { PanelBoard } from "./components/PanelBoard";
 import { isTauri } from "./lib/platform";
@@ -66,7 +66,16 @@ function SessionPage() {
           headerRight: <ChangedFilesBase sessionId={sessionId} />,
           className: "w-72 shrink-0",
           content: (
-            <ChangedFiles key={`changes-${sessionId}`} sessionId={sessionId} className="h-full" />
+            <div className="flex h-full min-h-0 flex-col">
+              <ChangedFiles
+                key={`changes-${sessionId}`}
+                sessionId={sessionId}
+                className="min-h-0 flex-1 basis-0"
+              />
+              <div className="min-h-0 flex-1 basis-0 border-t border-zinc-800">
+                <SessionShellTerminal key={`shell-${sessionId}`} sessionId={sessionId} />
+              </div>
+            </div>
           ),
         },
         {

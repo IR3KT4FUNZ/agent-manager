@@ -8,9 +8,9 @@ import type {
   WorktreeInfo,
 } from "@agent-manager/shared";
 import type { Project } from "./projects";
+import { trimScrollback } from "./scrollback";
+import { ShellTerminal } from "./terminal";
 import { createWorktree, discardWorktree, removeWorktree } from "./worktrees";
-
-const SCROLLBACK_LIMIT = 400_000;
 
 type Subscriber = (message: ServerMessage) => void;
 
@@ -55,6 +55,7 @@ export class Session {
   private scrollback = "";
   private subscribers = new Set<Subscriber>();
   private pty: ReturnType<typeof spawn>;
+  private shell?: ShellTerminal;
 
   constructor(resolved: ResolvedSession) {
     this.projectId = resolved.projectId;
@@ -72,7 +73,7 @@ export class Session {
     });
 
     this.pty.onData((data: string) => {
-      this.scrollback = (this.scrollback + data).slice(-SCROLLBACK_LIMIT);
+      this.scrollback = trimScrollback(this.scrollback, data);
       this.broadcast({ type: "output", data });
     });
 
@@ -97,6 +98,11 @@ export class Session {
     };
   }
 
+  terminal(): ShellTerminal {
+    if (!this.shell || this.shell.status === "exited") this.shell = new ShellTerminal(this.cwd);
+    return this.shell;
+  }
+
   attach(subscriber: Subscriber): () => void {
     subscriber({ type: "info", session: this.info() });
     if (this.scrollback) subscriber({ type: "output", data: this.scrollback });
@@ -114,6 +120,7 @@ export class Session {
   }
 
   dispose() {
+    this.shell?.dispose();
     if (this.status === "running") this.pty.kill();
   }
 
