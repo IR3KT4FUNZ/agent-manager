@@ -1,4 +1,9 @@
-import type { CreateSessionRequest, SessionChanges, SessionInfo } from "@agent-manager/shared";
+import type {
+  CreateSessionRequest,
+  ProjectInfo,
+  SessionChanges,
+  SessionInfo,
+} from "@agent-manager/shared";
 
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -10,6 +15,22 @@ async function json<T>(response: Response): Promise<T> {
     throw new Error(message);
   }
   return response.json() as Promise<T>;
+}
+
+export function listProjects(): Promise<ProjectInfo[]> {
+  return fetch("/api/projects").then((r) => json<ProjectInfo[]>(r));
+}
+
+export function openProject(path?: string): Promise<ProjectInfo> {
+  return fetch("/api/projects", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path }),
+  }).then((r) => json<ProjectInfo>(r));
+}
+
+export function closeProject(id: string): Promise<void> {
+  return fetch(`/api/projects/${id}`, { method: "DELETE" }).then((r) => json(r));
 }
 
 export function listSessions(): Promise<SessionInfo[]> {
