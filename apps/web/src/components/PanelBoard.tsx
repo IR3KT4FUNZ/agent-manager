@@ -1,11 +1,12 @@
 import { useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { usePanelOrder, type PanelId } from "../lib/panelOrder";
+import { clampPanelWidth, MIN_PANEL_WIDTH, usePanelWidths } from "../lib/panelWidths";
 
 export interface PanelSpec {
   id: PanelId;
   title: string;
   headerRight?: ReactNode;
-  className?: string;
+  defaultWidth: number;
   content: ReactNode;
 }
 
@@ -18,11 +19,17 @@ function panelIdAt(x: number, y: number): PanelId | null {
 
 export function PanelBoard({ panels }: { panels: PanelSpec[] }) {
   const { order, movePanel } = usePanelOrder();
+  const { widths, setPanelWidth } = usePanelWidths();
   const [drag, setDrag] = useState<{ id: PanelId; over: PanelId } | null>(null);
+  const [resizing, setResizing] = useState(false);
   const pressRef = useRef<{ id: PanelId; x: number; y: number } | null>(null);
+  const resizeRef = useRef<{ id: PanelId; x: number; width: number; maxWidth: number } | null>(null);
+  const elementsRef = useRef(new Map<PanelId, HTMLElement>());
 
   const position = (id: PanelId) => order.indexOf(id);
-  const leftmost = Math.min(...panels.map((panel) => position(panel.id)));
+  const laidOut = [...panels].sort((a, b) => position(a.id) - position(b.id));
+  const flexible = laidOut[laidOut.length - 1];
+  const widthOf = (panel: PanelSpec) => widths[panel.id] ?? panel.defaultWidth;
 
   function beginPress(event: PointerEvent<HTMLElement>, id: PanelId) {
     if (event.button !== 0) return;
@@ -53,22 +60,71 @@ export function PanelBoard({ panels }: { panels: PanelSpec[] }) {
     setDrag(null);
   }
 
+  function beginResize(event: PointerEvent<HTMLElement>, id: PanelId) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const width = elementsRef.current.get(id)?.getBoundingClientRect().width;
+    if (width === undefined) return;
+    const flexibleWidth = elementsRef.current.get(flexible.id)?.getBoundingClientRect().width ?? 0;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = {
+      id,
+      x: event.clientX,
+      width,
+      maxWidth: width + Math.max(0, flexibleWidth - MIN_PANEL_WIDTH),
+    };
+    setResizing(true);
+  }
+
+  function trackResize(event: PointerEvent<HTMLElement>) {
+    const resize = resizeRef.current;
+    if (!resize) return;
+    const desired = resize.width + (event.clientX - resize.x);
+    setPanelWidth(resize.id, clampPanelWidth(desired, resize.maxWidth));
+  }
+
+  function endResize() {
+    resizeRef.current = null;
+    setResizing(false);
+  }
+
   return (
-    <div className="flex h-full min-w-0 flex-1">
+    <div className={`flex h-full min-w-0 flex-1 ${resizing ? "select-none" : ""}`}>
       {panels.map((panel) => {
         const isSource = drag?.id === panel.id;
         const isTarget = drag != null && drag.over === panel.id && drag.id !== panel.id;
+        const isFlexible = panel.id === flexible.id;
+        const before = laidOut[laidOut.indexOf(panel) - 1];
         return (
           <section
             key={panel.id}
             data-panel={panel.id}
-            style={{ order: position(panel.id) }}
-            className={`flex min-w-0 flex-col ${
-              position(panel.id) === leftmost ? "" : "border-l border-zinc-800"
+            ref={(element) => {
+              if (element) elementsRef.current.set(panel.id, element);
+              else elementsRef.current.delete(panel.id);
+            }}
+            style={{
+              order: position(panel.id),
+              flex: isFlexible ? "1 1 auto" : `0 1 ${widthOf(panel)}px`,
+              minWidth: MIN_PANEL_WIDTH,
+            }}
+            className={`relative flex flex-col ${
+              before ? "border-l border-zinc-800" : ""
             } ${isSource ? "opacity-50" : ""} ${
               isTarget ? "ring-1 ring-zinc-500 ring-inset" : ""
-            } ${panel.className ?? ""}`}
+            }`}
           >
+            {before && (
+              <div
+                onPointerDown={(event) => beginResize(event, before.id)}
+                onPointerMove={trackResize}
+                onPointerUp={endResize}
+                onPointerCancel={endResize}
+                onDoubleClick={() => setPanelWidth(before.id, before.defaultWidth)}
+                title="Drag to resize · double-click to reset"
+                className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-zinc-600"
+              />
+            )}
             <header
               onPointerDown={(event) => beginPress(event, panel.id)}
               onPointerMove={trackPointer}
