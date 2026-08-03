@@ -4,6 +4,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SessionShellTerminal, SessionTerminal } from "./components/SessionTerminal";
 import { ChangedFiles, ChangedFilesBase } from "./components/ChangedFiles";
 import { PanelBoard } from "./components/PanelBoard";
+import { VerticalSplit } from "./components/VerticalSplit";
 import { isTauri } from "./lib/platform";
 
 const rootRoute = createRootRoute({
@@ -66,16 +67,17 @@ function SessionPage() {
           headerRight: <ChangedFilesBase sessionId={sessionId} />,
           defaultWidth: 288,
           content: (
-            <div className="flex h-full min-h-0 flex-col">
-              <ChangedFiles
-                key={`changes-${sessionId}`}
-                sessionId={sessionId}
-                className="min-h-0 flex-1 basis-0"
-              />
-              <div className="min-h-0 flex-1 basis-0 border-t border-zinc-800">
-                <SessionShellTerminal key={`shell-${sessionId}`} sessionId={sessionId} />
-              </div>
-            </div>
+            <VerticalSplit
+              storageKey="agent-manager.changes-split"
+              top={
+                <ChangedFiles
+                  key={`changes-${sessionId}`}
+                  sessionId={sessionId}
+                  className="min-h-0 flex-1"
+                />
+              }
+              bottom={<SessionShellTerminal key={`shell-${sessionId}`} sessionId={sessionId} />}
+            />
           ),
         },
         {

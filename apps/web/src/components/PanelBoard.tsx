@@ -1,6 +1,6 @@
 import { useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { usePanelOrder, type PanelId } from "../lib/panelOrder";
-import { clampPanelWidth, MIN_PANEL_WIDTH, usePanelWidths } from "../lib/panelWidths";
+import { clampSize, MIN_PANEL_WIDTH, usePanelWidths } from "../lib/paneSizes";
 
 export interface PanelSpec {
   id: PanelId;
@@ -23,7 +23,9 @@ export function PanelBoard({ panels }: { panels: PanelSpec[] }) {
   const [drag, setDrag] = useState<{ id: PanelId; over: PanelId } | null>(null);
   const [resizing, setResizing] = useState(false);
   const pressRef = useRef<{ id: PanelId; x: number; y: number } | null>(null);
-  const resizeRef = useRef<{ id: PanelId; x: number; width: number; maxWidth: number } | null>(null);
+  const resizeRef = useRef<{ id: PanelId; x: number; width: number; maxWidth: number } | null>(
+    null,
+  );
   const elementsRef = useRef(new Map<PanelId, HTMLElement>());
 
   const position = (id: PanelId) => order.indexOf(id);
@@ -80,7 +82,7 @@ export function PanelBoard({ panels }: { panels: PanelSpec[] }) {
     const resize = resizeRef.current;
     if (!resize) return;
     const desired = resize.width + (event.clientX - resize.x);
-    setPanelWidth(resize.id, clampPanelWidth(desired, resize.maxWidth));
+    setPanelWidth(resize.id, clampSize(desired, MIN_PANEL_WIDTH, resize.maxWidth));
   }
 
   function endResize() {
@@ -110,9 +112,7 @@ export function PanelBoard({ panels }: { panels: PanelSpec[] }) {
             }}
             className={`relative flex flex-col ${
               before ? "border-l border-zinc-800" : ""
-            } ${isSource ? "opacity-50" : ""} ${
-              isTarget ? "ring-1 ring-zinc-500 ring-inset" : ""
-            }`}
+            } ${isSource ? "opacity-50" : ""} ${isTarget ? "ring-1 ring-zinc-500 ring-inset" : ""}`}
           >
             {before && (
               <div
