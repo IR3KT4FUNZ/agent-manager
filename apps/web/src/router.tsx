@@ -4,6 +4,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SessionShellTerminal, SessionTerminal } from "./components/SessionTerminal";
 import { ChangedFiles, ChangedFilesBase } from "./components/ChangedFiles";
 import { PanelBoard } from "./components/PanelBoard";
+import { VerticalSplit } from "./components/VerticalSplit";
 import { isTauri } from "./lib/platform";
 
 const rootRoute = createRootRoute({
@@ -32,11 +33,11 @@ const indexRoute = createRoute({
   component: () => (
     <PanelBoard
       panels={[
-        { id: "sessions", title: "Sessions", className: "w-64 shrink-0", content: <Sidebar /> },
+        { id: "sessions", title: "Sessions", defaultWidth: 256, content: <Sidebar /> },
         {
           id: "chat",
           title: "Chat",
-          className: "flex-1",
+          defaultWidth: 640,
           content: (
             <div className="flex h-full items-center justify-center text-sm text-zinc-500">
               Open a project or select a session to get started
@@ -59,29 +60,30 @@ function SessionPage() {
   return (
     <PanelBoard
       panels={[
-        { id: "sessions", title: "Sessions", className: "w-64 shrink-0", content: <Sidebar /> },
+        { id: "sessions", title: "Sessions", defaultWidth: 256, content: <Sidebar /> },
         {
           id: "changes",
           title: "Changes",
           headerRight: <ChangedFilesBase sessionId={sessionId} />,
-          className: "w-72 shrink-0",
+          defaultWidth: 288,
           content: (
-            <div className="flex h-full min-h-0 flex-col">
-              <ChangedFiles
-                key={`changes-${sessionId}`}
-                sessionId={sessionId}
-                className="min-h-0 flex-1 basis-0"
-              />
-              <div className="min-h-0 flex-1 basis-0 border-t border-zinc-800">
-                <SessionShellTerminal key={`shell-${sessionId}`} sessionId={sessionId} />
-              </div>
-            </div>
+            <VerticalSplit
+              storageKey="agent-manager.changes-split"
+              top={
+                <ChangedFiles
+                  key={`changes-${sessionId}`}
+                  sessionId={sessionId}
+                  className="min-h-0 flex-1"
+                />
+              }
+              bottom={<SessionShellTerminal key={`shell-${sessionId}`} sessionId={sessionId} />}
+            />
           ),
         },
         {
           id: "chat",
           title: "Chat",
-          className: "flex-1",
+          defaultWidth: 640,
           content: <SessionTerminal key={sessionId} sessionId={sessionId} />,
         },
       ]}
