@@ -1,14 +1,19 @@
-import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { basename, extname, join } from "node:path";
+import { statSync } from "node:fs";
+import { join } from "node:path";
 import type {
   ChangeEntry,
   ChangeStatus,
+  FileDiff,
   SessionChanges,
   WorktreeInfo,
 } from "@agent-manager/shared";
+import { parseUnifiedDiff } from "./diffParse";
 import { branchExists, runGit } from "./worktrees";
+
+const MAX_FILE_BYTES = 1024 * 1024;
+const DIFF_CONTEXT_LINES = 3;
+
+export class NoSuchChangeError extends Error {}
 
 function mapStatus(code: string): ChangeStatus {
   switch (code) {
@@ -27,6 +32,23 @@ function mapStatus(code: string): ChangeStatus {
 
 function shortBase(baseRef: string): string {
   return baseRef === "HEAD" ? "HEAD" : baseRef.slice(0, 8);
+}
+
+// `runGit` trims its output, which would silently corrupt a diff's leading and
+// trailing blank lines; diffs are read as raw bytes instead.
+async function runGitRaw(
+  args: string[],
+  cwd: string,
+): Promise<{ bytes: Uint8Array; exitCode: number }> {
+  const proc = Bun.spawn(["git", ...args], {
+    cwd,
+    stdout: "pipe",
+    stderr: "ignore",
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
+  const bytes = new Uint8Array(await new Response(proc.stdout).arrayBuffer());
+  const exitCode = await proc.exited;
+  return { bytes, exitCode };
 }
 
 // The ref this worktree's changes are measured against: the point where it
@@ -67,7 +89,7 @@ async function computeChanges(worktree: WorktreeInfo): Promise<ComputedChanges> 
 
   // Committed + unstaged changes vs the base.
   const diff = await runGit(
-    ["-c", "core.quotepath=false", "diff", "--name-status", "-z", baseRef],
+    ["-c", "core.quotepath=false", "diff", "--name-status", "--find-renames", "-z", baseRef],
     cwd,
   );
   if (diff.exitCode === 0) {
@@ -76,9 +98,9 @@ async function computeChanges(worktree: WorktreeInfo): Promise<ComputedChanges> 
       const code = tokens[i++]!;
       const letter = code[0]!;
       if (letter === "R" || letter === "C") {
-        i++; // old path
+        const oldPath = tokens[i++];
         const newPath = tokens[i++];
-        if (newPath) byPath.set(newPath, { path: newPath, status: mapStatus(letter) });
+        if (newPath) byPath.set(newPath, { path: newPath, oldPath, status: mapStatus(letter) });
       } else {
         const path = tokens[i++];
         if (path) byPath.set(path, { path, status: mapStatus(letter) });
@@ -103,60 +125,67 @@ export async function listChanges(worktree: WorktreeInfo): Promise<SessionChange
   return { base: shortBase(baseRef), files };
 }
 
-// Writes the base-branch version of `relPath` to a fresh temp file and returns
-// its path. Returns an empty file when the path does not exist in the base
-// (added / untracked / renamed).
-async function baseVersionToTemp(cwd: string, baseRef: string, relPath: string, dir: string): Promise<string> {
-  const proc = Bun.spawn(["git", "show", `${baseRef}:${relPath}`], {
-    cwd,
-    stdout: "pipe",
-    stderr: "ignore",
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-  });
-  const bytes = new Uint8Array(await new Response(proc.stdout).arrayBuffer());
-  const exitCode = await proc.exited;
-
-  const ext = extname(relPath);
-  const file = join(dir, `${basename(relPath, ext) || "file"}${ext}`);
-  writeFileSync(file, exitCode === 0 ? bytes : new Uint8Array());
-  return file;
+async function baseFileSize(cwd: string, baseRef: string, relPath: string): Promise<number> {
+  const { stdout, exitCode } = await runGit(["cat-file", "-s", `${baseRef}:${relPath}`], cwd);
+  const size = Number(stdout);
+  return exitCode === 0 && Number.isFinite(size) ? size : 0;
 }
 
-// Opens the clicked file's branch-relative diff in Zed: base version on the
-// left, the live worktree file (editable, at its real path) on the right.
-export async function openDiffInZed(worktree: WorktreeInfo, relPath: string): Promise<void> {
+function worktreeFileSize(cwd: string, relPath: string): number {
+  try {
+    return statSync(join(cwd, relPath)).size;
+  } catch {
+    return 0;
+  }
+}
+
+function diffArgs(baseRef: string, entry: ChangeEntry): string[] {
+  const common = ["-c", "core.quotepath=false", "diff", "--no-color", `-U${DIFF_CONTEXT_LINES}`];
+  if (entry.status === "untracked") {
+    return [...common, "--no-index", "--", "/dev/null", entry.path];
+  }
+  // A rename is only re-detected when both halves of the pair are in the pathspec.
+  const paths = entry.oldPath ? [entry.oldPath, entry.path] : [entry.path];
+  return [...common, "--find-renames", baseRef, "--", ...paths];
+}
+
+export async function getFileDiff(worktree: WorktreeInfo, relPath: string): Promise<FileDiff> {
+  const cwd = worktree.path;
   const { baseRef, files } = await computeChanges(worktree);
   const entry = files.find((f) => f.path === relPath);
-  if (!entry) {
-    throw new Error(`No pending change for '${relPath}'.`);
-  }
+  if (!entry) throw new NoSuchChangeError(`No pending change for '${relPath}'.`);
 
-  const zed = Bun.which("zed");
-  if (!zed) {
-    throw new Error(
-      "Zed CLI not found. Open Zed and run 'cli: install cli binary' from the command palette (⌘⇧P).",
-    );
-  }
+  const oldSize =
+    entry.status === "untracked" ? 0 : await baseFileSize(cwd, baseRef, entry.oldPath ?? relPath);
+  const newSize = worktreeFileSize(cwd, relPath);
 
-  const dir = join(tmpdir(), "agent-manager-diff", randomUUID());
-  mkdirSync(dir, { recursive: true });
+  const diff: FileDiff = {
+    path: relPath,
+    oldPath: entry.oldPath,
+    status: entry.status,
+    base: shortBase(baseRef),
+    kind: "text",
+    hunks: [],
+    additions: 0,
+    deletions: 0,
+    oldSize,
+    newSize,
+  };
 
-  const oldSide = await baseVersionToTemp(worktree.path, baseRef, relPath, dir);
+  if (oldSize > MAX_FILE_BYTES || newSize > MAX_FILE_BYTES) return { ...diff, kind: "too-large" };
 
-  let newSide = join(worktree.path, relPath);
-  if (entry.status === "deleted") {
-    // The file no longer exists in the worktree; give Zed an empty right side.
-    const ext = extname(relPath);
-    newSide = join(dir, `deleted-${basename(relPath, ext) || "file"}${ext}`);
-    writeFileSync(newSide, new Uint8Array());
-  }
+  // `--no-index` reports "files differ" as exit code 1, which is the normal case here.
+  const { bytes, exitCode } = await runGitRaw(diffArgs(baseRef, entry), cwd);
+  const failed = entry.status === "untracked" ? exitCode > 1 : exitCode !== 0;
+  if (failed) throw new Error(`git could not diff '${relPath}'.`);
+  if (bytes.length > MAX_FILE_BYTES) return { ...diff, kind: "too-large" };
 
-  // --add opens the diff as a tab in the currently focused Zed window (reusing an
-  // already-open window) instead of spawning a new one; it still opens a window when
-  // none is running.
-  Bun.spawn([zed, "--add", "--diff", oldSide, newSide], {
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "ignore",
-  });
+  const parsed = parseUnifiedDiff(new TextDecoder().decode(bytes));
+  if (parsed.isBinary) return { ...diff, kind: "binary" };
+  return {
+    ...diff,
+    hunks: parsed.hunks,
+    additions: parsed.additions,
+    deletions: parsed.deletions,
+  };
 }
