@@ -34,15 +34,23 @@ describe("reorderPanels", () => {
 
 describe("sanitizePanelOrder", () => {
   test("accepts a stored permutation", () => {
-    expect(sanitizePanelOrder(["chat", "sessions", "changes"])).toEqual([
+    expect(sanitizePanelOrder(["chat", "sessions", "diff", "changes"])).toEqual([
       "chat",
       "sessions",
+      "diff",
       "changes",
     ]);
   });
 
   test("falls back to the default order for invalid values", () => {
-    const invalid = [null, "chat", [], ["chat", "chat", "chat"], ["chat", "sessions", "bogus"]];
+    const invalid = [
+      null,
+      "chat",
+      [],
+      ["chat", "chat", "chat", "chat"],
+      ["chat", "sessions", "diff", "bogus"],
+      ["chat", "sessions", "changes"],
+    ];
     for (const value of invalid) {
       expect(sanitizePanelOrder(value)).toEqual([...DEFAULT_PANEL_ORDER]);
     }

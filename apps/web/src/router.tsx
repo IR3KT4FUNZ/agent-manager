@@ -1,9 +1,11 @@
+import { useEffect, useState } from "react";
 import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
 import { APP_NAME } from "@agent-manager/shared";
 import { Sidebar } from "./components/Sidebar";
 import { SessionShellTerminal, SessionTerminal } from "./components/SessionTerminal";
 import { ChangedFiles, ChangedFilesBase } from "./components/ChangedFiles";
-import { PanelBoard } from "./components/PanelBoard";
+import { DiffPanelHeader, DiffViewer } from "./components/DiffViewer";
+import { PanelBoard, type PanelSpec } from "./components/PanelBoard";
 import { VerticalSplit } from "./components/VerticalSplit";
 import { isTauri } from "./lib/platform";
 
@@ -57,6 +59,28 @@ const sessionRoute = createRoute({
 
 function SessionPage() {
   const { sessionId } = sessionRoute.useParams();
+  const [diffPath, setDiffPath] = useState<string | null>(null);
+
+  useEffect(() => setDiffPath(null), [sessionId]);
+
+  const diffPanel: PanelSpec[] = diffPath
+    ? [
+        {
+          id: "diff",
+          title: "Diff",
+          headerRight: (
+            <DiffPanelHeader
+              sessionId={sessionId}
+              path={diffPath}
+              onClose={() => setDiffPath(null)}
+            />
+          ),
+          defaultWidth: 720,
+          content: <DiffViewer key={diffPath} sessionId={sessionId} path={diffPath} />,
+        },
+      ]
+    : [];
+
   return (
     <PanelBoard
       panels={[
@@ -73,6 +97,8 @@ function SessionPage() {
                 <ChangedFiles
                   key={`changes-${sessionId}`}
                   sessionId={sessionId}
+                  selectedPath={diffPath}
+                  onSelect={setDiffPath}
                   className="min-h-0 flex-1"
                 />
               }
@@ -80,6 +106,7 @@ function SessionPage() {
             />
           ),
         },
+        ...diffPanel,
         {
           id: "chat",
           title: "Chat",

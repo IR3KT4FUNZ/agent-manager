@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-export type PanelId = "sessions" | "changes" | "chat";
+export type PanelId = "sessions" | "changes" | "diff" | "chat";
 
-export const DEFAULT_PANEL_ORDER: readonly PanelId[] = ["sessions", "changes", "chat"];
+export const DEFAULT_PANEL_ORDER: readonly PanelId[] = ["sessions", "changes", "diff", "chat"];
 
 const STORAGE_KEY = "agent-manager.panel-order";
 
