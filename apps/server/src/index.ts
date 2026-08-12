@@ -6,13 +6,12 @@ import type { ServerWebSocket } from "bun";
 import type {
   ClientMessage,
   CreateSessionRequest,
-  OpenDiffRequest,
   OpenProjectRequest,
   ServerMessage,
 } from "@agent-manager/shared";
 import { ProjectManager } from "./projects";
 import { SessionManager } from "./sessions";
-import { listChanges, openDiffInZed } from "./changes";
+import { getFileDiff, listChanges, NoSuchChangeError } from "./changes";
 
 const projects = new ProjectManager();
 const manager = new SessionManager();
@@ -73,17 +72,17 @@ app.get("/api/sessions/:id/changes", async (c) => {
   }
 });
 
-app.post("/api/sessions/:id/open-diff", async (c) => {
+app.get("/api/sessions/:id/diff", async (c) => {
   const session = manager.get(c.req.param("id") ?? "");
   if (!session) return c.json({ error: "session not found" }, 404);
   if (!session.worktree) return c.json({ error: "session has no git worktree" }, 400);
-  const { path } = (await c.req.json().catch(() => ({}))) as OpenDiffRequest;
+  const path = c.req.query("path");
   if (!path) return c.json({ error: "missing path" }, 400);
   try {
-    await openDiffInZed(session.worktree, path);
-    return c.json({ ok: true });
+    return c.json(await getFileDiff(session.worktree, path));
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+    const message = error instanceof Error ? error.message : String(error);
+    return c.json({ error: message }, error instanceof NoSuchChangeError ? 404 : 400);
   }
 });
 

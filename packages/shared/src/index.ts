@@ -41,6 +41,7 @@ export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "untra
 
 export interface ChangeEntry {
   path: string;
+  oldPath?: string;
   status: ChangeStatus;
 }
 
@@ -49,8 +50,34 @@ export interface SessionChanges {
   files: ChangeEntry[];
 }
 
-export interface OpenDiffRequest {
+export interface DiffLine {
+  kind: "context" | "add" | "del";
+  text: string;
+  oldLine: number | null;
+  newLine: number | null;
+  noNewline?: boolean;
+}
+
+export interface DiffHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  header: string;
+  lines: DiffLine[];
+}
+
+export interface FileDiff {
   path: string;
+  oldPath?: string;
+  status: ChangeStatus;
+  base: string;
+  kind: "text" | "binary" | "too-large";
+  hunks: DiffHunk[];
+  additions: number;
+  deletions: number;
+  oldSize: number;
+  newSize: number;
 }
 
 export type ClientMessage =
