@@ -80,6 +80,13 @@ export interface FileDiff {
   newSize: number;
 }
 
+export interface GithubStatus {
+  installed: boolean;
+  authenticated: boolean;
+  login?: string;
+  message?: string;
+}
+
 export type ClientMessage =
   | { type: "input"; data: string }
   | { type: "resize"; cols: number; rows: number }

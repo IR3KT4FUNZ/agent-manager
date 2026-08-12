@@ -12,6 +12,7 @@ import type {
 import { ProjectManager } from "./projects";
 import { SessionManager } from "./sessions";
 import { getFileDiff, listChanges, NoSuchChangeError } from "./changes";
+import { checkGithubStatus } from "./github";
 
 const projects = new ProjectManager();
 const manager = new SessionManager();
@@ -20,6 +21,8 @@ const { upgradeWebSocket, websocket } = createBunWebSocket<ServerWebSocket>();
 const app = new Hono();
 
 app.get("/api/health", (c) => c.json({ ok: true }));
+
+app.get("/api/github/status", async (c) => c.json(await checkGithubStatus()));
 
 app.get("/api/projects", (c) => c.json(projects.list()));
 
