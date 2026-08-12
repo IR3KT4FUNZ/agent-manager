@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
 import { APP_NAME } from "@agent-manager/shared";
+import { listSessions } from "./lib/api";
 import { Sidebar } from "./components/Sidebar";
 import { SessionShellTerminal, SessionTerminal } from "./components/SessionTerminal";
 import { ChangedFiles, ChangedFilesBase } from "./components/ChangedFiles";
@@ -61,6 +63,9 @@ function SessionPage() {
   const { sessionId } = sessionRoute.useParams();
   const [diffPath, setDiffPath] = useState<string | null>(null);
 
+  const { data: sessions = [] } = useQuery({ queryKey: ["sessions"], queryFn: listSessions });
+  const isPrSession = sessions.some((session) => session.id === sessionId && session.pr);
+
   useEffect(() => setDiffPath(null), [sessionId]);
 
   const diffPanel: PanelSpec[] = diffPath
@@ -99,6 +104,7 @@ function SessionPage() {
                   sessionId={sessionId}
                   selectedPath={diffPath}
                   onSelect={setDiffPath}
+                  autoSelectFirst={isPrSession}
                   className="min-h-0 flex-1"
                 />
               }

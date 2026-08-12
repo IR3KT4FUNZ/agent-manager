@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ChangeEntry, ChangeStatus } from "@agent-manager/shared";
 import { getSessionChanges } from "../lib/api";
@@ -50,17 +51,28 @@ export function ChangedFiles({
   sessionId,
   selectedPath,
   onSelect,
+  autoSelectFirst,
   className,
 }: {
   sessionId: string;
   selectedPath: string | null;
   onSelect: (path: string) => void;
+  autoSelectFirst?: boolean;
   className?: string;
 }) {
   const { data, isLoading } = useSessionChanges(sessionId);
 
   const files = data?.files ?? [];
   const isGit = data ? data.base !== "" : true;
+
+  // Opening a pull request should land on its diff, not on an empty panel.
+  const autoSelected = useRef(false);
+  useEffect(() => {
+    const first = files[0];
+    if (!autoSelectFirst || autoSelected.current || selectedPath || !first) return;
+    autoSelected.current = true;
+    onSelect(first.path);
+  }, [autoSelectFirst, files, onSelect, selectedPath]);
 
   return (
     <div className={`flex flex-col bg-zinc-900 ${className ?? ""}`}>

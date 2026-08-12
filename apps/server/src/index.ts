@@ -13,6 +13,7 @@ import { ProjectManager } from "./projects";
 import { SessionManager } from "./sessions";
 import { getFileDiff, listChanges, NoSuchChangeError } from "./changes";
 import { checkGithubStatus } from "./github";
+import { listOpenPrs } from "./pr";
 
 const projects = new ProjectManager();
 const manager = new SessionManager();
@@ -44,6 +45,17 @@ app.delete("/api/projects/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+app.get("/api/projects/:id/pulls", async (c) => {
+  const project = projects.get(c.req.param("id") ?? "");
+  if (!project) return c.json({ error: "project not found" }, 404);
+  if (!project.repoRoot) return c.json({ error: "project is not a git repository" }, 400);
+  try {
+    return c.json(await listOpenPrs(project.repoRoot));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+  }
+});
+
 app.get("/api/sessions", (c) => c.json(manager.list()));
 
 app.post("/api/sessions", async (c) => {
@@ -69,7 +81,7 @@ app.get("/api/sessions/:id/changes", async (c) => {
   if (!session) return c.json({ error: "session not found" }, 404);
   if (!session.worktree) return c.json({ base: "", files: [] });
   try {
-    return c.json(await listChanges(session.worktree));
+    return c.json(await listChanges(session.worktree, session.diffBase()));
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
   }
@@ -82,7 +94,7 @@ app.get("/api/sessions/:id/diff", async (c) => {
   const path = c.req.query("path");
   if (!path) return c.json({ error: "missing path" }, 400);
   try {
-    return c.json(await getFileDiff(session.worktree, path));
+    return c.json(await getFileDiff(session.worktree, path, session.diffBase()));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return c.json({ error: message }, error instanceof NoSuchChangeError ? 404 : 400);

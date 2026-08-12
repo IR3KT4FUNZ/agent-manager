@@ -62,15 +62,22 @@ export function worktreePathFor(repoRoot: string, name: string): string {
   return join(homedir(), "agent-manager", "workspaces", basename(repoRoot), name);
 }
 
-export async function createWorktree(repoRoot: string): Promise<WorktreeInfo> {
+export interface WorktreeRequest {
+  branchFor: (attempt: number) => string;
+  startRef: string;
+}
+
+export async function createWorktreeAt(
+  repoRoot: string,
+  { branchFor, startRef }: WorktreeRequest,
+): Promise<WorktreeInfo> {
   for (let attempt = 0; attempt < 10; attempt++) {
-    const base = generateWorkspaceName();
-    const name = attempt === 0 ? base : `${base}-${attempt + 1}`;
+    const name = branchFor(attempt);
     if (await branchExists(repoRoot, name)) continue;
 
     const path = worktreePathFor(repoRoot, name);
     const { exitCode, stderr } = await runGit(
-      ["-C", repoRoot, "worktree", "add", "-b", name, path, "HEAD"],
+      ["-C", repoRoot, "worktree", "add", "-b", name, path, startRef],
       repoRoot,
     );
     if (exitCode === 0) return { path, branch: name, repoRoot };
@@ -79,6 +86,16 @@ export async function createWorktree(repoRoot: string): Promise<WorktreeInfo> {
     }
   }
   throw new Error("Failed to create git worktree: could not find a free branch name");
+}
+
+export function createWorktree(repoRoot: string): Promise<WorktreeInfo> {
+  return createWorktreeAt(repoRoot, {
+    branchFor: (attempt) => {
+      const base = generateWorkspaceName();
+      return attempt === 0 ? base : `${base}-${attempt + 1}`;
+    },
+    startRef: "HEAD",
+  });
 }
 
 export async function removeWorktree(info: WorktreeInfo): Promise<void> {
