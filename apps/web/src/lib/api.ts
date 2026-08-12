@@ -2,6 +2,7 @@ import type {
   CreateSessionRequest,
   FileDiff,
   GithubStatus,
+  PrStatus,
   PrSummary,
   ProjectInfo,
   SessionChanges,
@@ -58,6 +59,14 @@ export function createSession(request: CreateSessionRequest): Promise<SessionInf
 
 export function deleteSession(id: string): Promise<void> {
   return fetch(`/api/sessions/${id}`, { method: "DELETE" }).then((r) => json(r));
+}
+
+export function getSessionPr(id: string): Promise<PrStatus> {
+  return fetch(`/api/sessions/${id}/pr`).then((r) => json<PrStatus>(r));
+}
+
+export function syncSessionPr(id: string): Promise<PrStatus> {
+  return fetch(`/api/sessions/${id}/pr/sync`, { method: "POST" }).then((r) => json<PrStatus>(r));
 }
 
 export function getSessionChanges(id: string): Promise<SessionChanges> {

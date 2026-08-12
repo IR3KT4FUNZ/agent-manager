@@ -7,6 +7,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SessionShellTerminal, SessionTerminal } from "./components/SessionTerminal";
 import { ChangedFiles, ChangedFilesBase } from "./components/ChangedFiles";
 import { DiffPanelHeader, DiffViewer } from "./components/DiffViewer";
+import { PrBadge, PrDesyncBanner } from "./components/PrStatus";
 import { PanelBoard, type PanelSpec } from "./components/PanelBoard";
 import { VerticalSplit } from "./components/VerticalSplit";
 import { isTauri } from "./lib/platform";
@@ -93,23 +94,33 @@ function SessionPage() {
         {
           id: "changes",
           title: "Changes",
-          headerRight: <ChangedFilesBase sessionId={sessionId} />,
+          headerRight: (
+            <div className="flex min-w-0 items-center gap-2">
+              <PrBadge sessionId={sessionId} />
+              <ChangedFilesBase sessionId={sessionId} />
+            </div>
+          ),
           defaultWidth: 288,
           content: (
-            <VerticalSplit
-              storageKey="agent-manager.changes-split"
-              top={
-                <ChangedFiles
-                  key={`changes-${sessionId}`}
-                  sessionId={sessionId}
-                  selectedPath={diffPath}
-                  onSelect={setDiffPath}
-                  autoSelectFirst={isPrSession}
-                  className="min-h-0 flex-1"
+            <div className="flex h-full min-h-0 flex-col">
+              <PrDesyncBanner sessionId={sessionId} />
+              <div className="min-h-0 flex-1">
+                <VerticalSplit
+                  storageKey="agent-manager.changes-split"
+                  top={
+                    <ChangedFiles
+                      key={`changes-${sessionId}`}
+                      sessionId={sessionId}
+                      selectedPath={diffPath}
+                      onSelect={setDiffPath}
+                      autoSelectFirst={isPrSession}
+                      className="min-h-0 flex-1"
+                    />
+                  }
+                  bottom={<SessionShellTerminal key={`shell-${sessionId}`} sessionId={sessionId} />}
                 />
-              }
-              bottom={<SessionShellTerminal key={`shell-${sessionId}`} sessionId={sessionId} />}
-            />
+              </div>
+            </div>
           ),
         },
         ...diffPanel,

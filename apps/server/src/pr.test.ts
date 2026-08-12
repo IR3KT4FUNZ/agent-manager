@@ -4,9 +4,20 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { PrAssociation } from "@agent-manager/shared";
 import { listChanges } from "./changes";
-import { checkoutPrWorktree, prFetchRef, resolvePrAssociation } from "./pr";
+import {
+  checkoutPrWorktree,
+  loadPrStatus,
+  prFetchRef,
+  resolvePrAssociation,
+  syncWorktreeToPrHead,
+} from "./pr";
 import { stubGh, useStubGh } from "./testGh";
-import { commitAll, removeTempDirs, tempDir, tempRepo } from "./testRepo";
+import {
+  pushToPullRequest,
+  removeTempDirs,
+  tempDir,
+  tempRepoWithPullRequest,
+} from "./testRepo";
 import { runGit } from "./worktrees";
 
 const workspaceRoots: string[] = [];
@@ -40,26 +51,14 @@ function ghStub() {
   );
 }
 
-// A local "origin" carrying refs/pull/1/head, exactly like GitHub serves it.
 async function repoWithPullRequest(): Promise<{ repo: string; headSha: string }> {
-  const origin = tempDir("agent-manager-origin-");
-  await runGit(["init", "--bare", "-b", "main"], origin);
+  const fixture = await tempRepoWithPullRequest();
+  workspaceRoots.push(join(homedir(), "agent-manager", "workspaces", basename(fixture.repo)));
+  return fixture;
+}
 
-  const repo = await tempRepo();
-  workspaceRoots.push(join(homedir(), "agent-manager", "workspaces", basename(repo)));
-  await runGit(["remote", "add", "origin", origin], repo);
-  await runGit(["push", "origin", "main"], repo);
-
-  await runGit(["checkout", "-b", "feature"], repo);
-  writeFileSync(join(repo, "widget.txt"), "widget\n");
-  await commitAll(repo, "add a widget");
-  const headSha = (await runGit(["rev-parse", "HEAD"], repo)).stdout;
-  await runGit(["push", "origin", "HEAD:refs/pull/1/head"], repo);
-
-  // Leave the local repo as a plain checkout of main: the PR only exists on origin.
-  await runGit(["checkout", "main"], repo);
-  await runGit(["branch", "-D", "feature"], repo);
-  return { repo, headSha };
+function remoteHeadStub(headSha: string) {
+  return stubGh(`echo '{"headRefOid":"${headSha}"}'`);
 }
 
 function association(overrides: Partial<PrAssociation> = {}): PrAssociation {
@@ -125,4 +124,55 @@ test("checking out a PR builds a worktree at the PR head that diffs against its 
     base: "origin/main",
     files: [{ path: "widget.txt", status: "added" }],
   });
+});
+
+test("PR status is clean at the PR head, then flags what the worktree changed", async () => {
+  const { repo, headSha } = await repoWithPullRequest();
+  const pr = association({ headSha });
+  const worktree = await checkoutPrWorktree(repo, pr);
+  const stub = remoteHeadStub(headSha);
+  const restore = useStubGh(stub);
+
+  try {
+    const clean = await loadPrStatus(worktree, pr, undefined);
+    expect(clean.status).toEqual({
+      pr,
+      localDirty: false,
+      localAhead: false,
+      remoteAdvanced: false,
+      remoteHeadSha: headSha,
+      modifiedSinceHead: [],
+    });
+
+    writeFileSync(join(worktree.path, "widget.txt"), "edited\n");
+    writeFileSync(join(worktree.path, "notes.md"), "notes\n");
+
+    const edited = await loadPrStatus(worktree, pr, clean.lookup);
+    expect(edited.status).toMatchObject({
+      localDirty: true,
+      localAhead: false,
+      modifiedSinceHead: ["notes.md", "widget.txt"],
+    });
+    expect(stub.calls()).toHaveLength(1); // the second load reused the cached lookup
+  } finally {
+    restore();
+  }
+});
+
+test("a PR head that moved on GitHub shows as advanced, and syncing lands on it", async () => {
+  const { repo, headSha } = await repoWithPullRequest();
+  const pr = association({ headSha });
+  const worktree = await checkoutPrWorktree(repo, pr);
+  const pushedSha = await pushToPullRequest(repo, "extra.txt");
+  const restore = useStubGh(remoteHeadStub(pushedSha));
+
+  try {
+    const { status } = await loadPrStatus(worktree, pr, undefined);
+    expect(status).toMatchObject({ remoteAdvanced: true, remoteHeadSha: pushedSha });
+
+    expect(await syncWorktreeToPrHead(worktree, pr)).toBe(pushedSha);
+    expect((await runGit(["rev-parse", "HEAD"], worktree.path)).stdout).toBe(pushedSha);
+  } finally {
+    restore();
+  }
 });
