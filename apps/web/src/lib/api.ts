@@ -8,6 +8,7 @@ import type {
   ProjectInfo,
   SessionChanges,
   SessionInfo,
+  SubmitReviewRequest,
 } from "@agent-manager/shared";
 
 async function json<T>(response: Response): Promise<T> {
@@ -68,6 +69,22 @@ export function getSessionPr(id: string): Promise<PrStatus> {
 
 export function getSessionPrComments(id: string): Promise<PrReviewThread[]> {
   return fetch(`/api/sessions/${id}/pr/comments`).then((r) => json<PrReviewThread[]>(r));
+}
+
+export function submitPrReview(id: string, request: SubmitReviewRequest): Promise<void> {
+  return fetch(`/api/sessions/${id}/pr/review`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(request),
+  }).then((r) => json(r));
+}
+
+export function replyToPrComment(id: string, commentId: number, body: string): Promise<void> {
+  return fetch(`/api/sessions/${id}/pr/comments/${commentId}/reply`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ body }),
+  }).then((r) => json(r));
 }
 
 export function syncSessionPr(id: string): Promise<PrStatus> {

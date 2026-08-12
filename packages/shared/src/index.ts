@@ -143,6 +143,28 @@ export interface PrReviewThread {
   comments: PrReviewComment[];
 }
 
+export type PrReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+
+export interface PrDraftComment {
+  path: string;
+  line: number;
+  side: PrSide;
+  startLine?: number;
+  startSide?: PrSide;
+  body: string;
+}
+
+export interface SubmitReviewRequest {
+  event: PrReviewEvent;
+  body?: string;
+  comments: PrDraftComment[];
+  allowStale?: boolean;
+}
+
+export interface ReplyRequest {
+  body: string;
+}
+
 export interface PrStatus {
   pr: PrAssociation | null;
   localDirty: boolean;

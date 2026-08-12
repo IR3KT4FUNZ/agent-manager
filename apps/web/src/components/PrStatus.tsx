@@ -12,7 +12,7 @@ function stateLabel(state: PrState): string {
   return state.charAt(0) + state.slice(1).toLowerCase();
 }
 
-function useSessionPr(sessionId: string) {
+export function useSessionPr(sessionId: string) {
   return useQuery({
     queryKey: ["session-pr", sessionId],
     queryFn: () => getSessionPr(sessionId),

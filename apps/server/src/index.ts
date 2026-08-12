@@ -7,7 +7,9 @@ import type {
   ClientMessage,
   CreateSessionRequest,
   OpenProjectRequest,
+  ReplyRequest,
   ServerMessage,
+  SubmitReviewRequest,
 } from "@agent-manager/shared";
 import { ProjectManager } from "./projects";
 import { SessionManager } from "./sessions";
@@ -91,6 +93,32 @@ app.get("/api/sessions/:id/pr/comments", async (c) => {
   if (!session) return c.json({ error: "session not found" }, 404);
   try {
     return c.json(await session.prThreads());
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+  }
+});
+
+app.post("/api/sessions/:id/pr/review", async (c) => {
+  const session = manager.get(c.req.param("id") ?? "");
+  if (!session) return c.json({ error: "session not found" }, 404);
+  const request = (await c.req.json().catch(() => ({}))) as SubmitReviewRequest;
+  try {
+    await session.submitReview({ ...request, comments: request.comments ?? [] });
+    return c.json({ ok: true });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+  }
+});
+
+app.post("/api/sessions/:id/pr/comments/:commentId/reply", async (c) => {
+  const session = manager.get(c.req.param("id") ?? "");
+  if (!session) return c.json({ error: "session not found" }, 404);
+  const commentId = Number(c.req.param("commentId"));
+  const { body } = (await c.req.json().catch(() => ({}))) as ReplyRequest;
+  if (!Number.isInteger(commentId)) return c.json({ error: "invalid comment id" }, 400);
+  try {
+    await session.replyToComment(commentId, body ?? "");
+    return c.json({ ok: true });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
   }
