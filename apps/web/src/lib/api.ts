@@ -1,5 +1,6 @@
 import type {
   CreateSessionRequest,
+  FileDiff,
   ProjectInfo,
   SessionChanges,
   SessionInfo,
@@ -53,10 +54,8 @@ export function getSessionChanges(id: string): Promise<SessionChanges> {
   return fetch(`/api/sessions/${id}/changes`).then((r) => json<SessionChanges>(r));
 }
 
-export function openDiffInZed(id: string, path: string): Promise<void> {
-  return fetch(`/api/sessions/${id}/open-diff`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path }),
-  }).then((r) => json(r));
+export function getFileDiff(id: string, path: string): Promise<FileDiff> {
+  return fetch(`/api/sessions/${id}/diff?path=${encodeURIComponent(path)}`).then((r) =>
+    json<FileDiff>(r),
+  );
 }
