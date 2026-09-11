@@ -115,6 +115,15 @@ export interface PrAssociation {
   author: string;
 }
 
+export interface PrStatus {
+  pr: PrAssociation | null;
+  localDirty: boolean;
+  localAhead: boolean;
+  remoteAdvanced: boolean;
+  remoteHeadSha: string | null;
+  modifiedSinceHead: string[];
+}
+
 export type ClientMessage =
   | { type: "input"; data: string }
   | { type: "resize"; cols: number; rows: number }

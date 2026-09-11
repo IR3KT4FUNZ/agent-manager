@@ -1,10 +1,11 @@
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { ProjectManager } from "./projects";
 import { SessionManager } from "./sessions";
-import { removeTempDirs, tempDir, tempRepo } from "./testRepo";
+import { stubGh, useStubGh } from "./testGh";
+import { removeTempDirs, tempDir, tempRepo, tempRepoWithPullRequest } from "./testRepo";
 import { branchExists } from "./worktrees";
 
 const workspaceRoots: string[] = [];
@@ -51,6 +52,58 @@ test("closing a project kills its sessions and removes their worktrees, keeping 
   expect(sessions.list()).toHaveLength(0);
   expect(existsSync(path)).toBe(false);
   expect(await branchExists(repo, branch)).toBe(true);
+});
+
+function ghStubForPullRequest(headSha: string) {
+  const view = JSON.stringify({
+    number: 1,
+    title: "Add a widget",
+    state: "OPEN",
+    isDraft: false,
+    url: "https://github.com/octo/repo/pull/1",
+    baseRefName: "main",
+    headRefName: "feature",
+    headRefOid: headSha,
+    isCrossRepository: false,
+    author: { login: "contributor" },
+  });
+  return stubGh(
+    [
+      'case "$*" in',
+      `  "repo view --json nameWithOwner") echo '{"nameWithOwner":"octo/repo"}' ;;`,
+      `  "pr view 1 --json headRefOid") echo '{"headRefOid":"${headSha}"}' ;;`,
+      `  *) echo '${view}' ;;`,
+      "esac",
+    ].join("\n"),
+  );
+}
+
+test("a pull request session runs on the PR head and refuses to sync over local work", async () => {
+  const { repo, headSha } = await tempRepoWithPullRequest();
+  workspaceRoots.push(join(homedir(), "agent-manager", "workspaces", basename(repo)));
+  const project = await new ProjectManager().open(repo);
+  const sessions = new SessionManager();
+  const restore = useStubGh(ghStubForPullRequest(headSha));
+
+  try {
+    const session = await sessions.create(project, {
+      projectId: project.id,
+      command: "cat",
+      prNumber: 1,
+    });
+
+    expect(session.title).toBe("#1 Add a widget");
+    expect(session.worktree?.branch).toBe("pr-1-feature");
+    expect(session.pr).toMatchObject({ number: 1, headSha, baseRefName: "main" });
+    expect(session.diffBase()).toBe("origin/main");
+
+    writeFileSync(join(session.cwd, "widget.txt"), "edited\n");
+    expect((await session.prStatus()).localDirty).toBe(true);
+    await expect(session.syncToPrHead()).rejects.toThrow(/local changes/);
+  } finally {
+    restore();
+    await sessions.disposeProject(project.id);
+  }
 });
 
 test("a session in a non-repo project runs in the project directory", async () => {

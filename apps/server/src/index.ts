@@ -76,6 +76,26 @@ app.delete("/api/sessions/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+app.get("/api/sessions/:id/pr", async (c) => {
+  const session = manager.get(c.req.param("id") ?? "");
+  if (!session) return c.json({ error: "session not found" }, 404);
+  try {
+    return c.json(await session.prStatus());
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+  }
+});
+
+app.post("/api/sessions/:id/pr/sync", async (c) => {
+  const session = manager.get(c.req.param("id") ?? "");
+  if (!session) return c.json({ error: "session not found" }, 404);
+  try {
+    return c.json(await session.syncToPrHead());
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+  }
+});
+
 app.get("/api/sessions/:id/changes", async (c) => {
   const session = manager.get(c.req.param("id") ?? "");
   if (!session) return c.json({ error: "session not found" }, 404);

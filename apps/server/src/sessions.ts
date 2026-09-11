@@ -4,12 +4,19 @@ import { basename } from "node:path";
 import type {
   CreateSessionRequest,
   PrAssociation,
+  PrStatus,
   ServerMessage,
   SessionInfo,
   WorktreeInfo,
 } from "@agent-manager/shared";
 import type { Project } from "./projects";
-import { checkoutPrWorktree, resolvePrAssociation } from "./pr";
+import {
+  checkoutPrWorktree,
+  loadPrStatus,
+  resolvePrAssociation,
+  syncWorktreeToPrHead,
+  type PrLookup,
+} from "./pr";
 import { trimScrollback } from "./scrollback";
 import { ShellTerminal } from "./terminal";
 import { createWorktree, discardWorktree, removeWorktree } from "./worktrees";
@@ -68,10 +75,11 @@ export class Session {
   readonly cwd: string;
   readonly title: string;
   readonly worktree?: WorktreeInfo;
-  readonly pr?: PrAssociation;
+  pr?: PrAssociation;
   status: "running" | "exited" = "running";
   exitCode: number | null = null;
 
+  private prLookup?: PrLookup;
   private scrollback = "";
   private subscribers = new Set<Subscriber>();
   private pty: ReturnType<typeof spawn>;
@@ -124,6 +132,38 @@ export class Session {
   // what GitHub shows under "Files changed".
   diffBase(): string | undefined {
     return this.pr ? `origin/${this.pr.baseRefName}` : undefined;
+  }
+
+  async prStatus(): Promise<PrStatus> {
+    if (!this.worktree) {
+      return {
+        pr: null,
+        localDirty: false,
+        localAhead: false,
+        remoteAdvanced: false,
+        remoteHeadSha: null,
+        modifiedSinceHead: [],
+      };
+    }
+    const { status, lookup } = await loadPrStatus(this.worktree, this.pr, this.prLookup);
+    this.prLookup = lookup;
+    return status;
+  }
+
+  async syncToPrHead(): Promise<PrStatus> {
+    if (!this.worktree || !this.pr) {
+      throw new Error("This session is not reviewing a pull request.");
+    }
+    const status = await this.prStatus();
+    if (status.localDirty || status.localAhead) {
+      throw new Error(
+        "The worktree has local changes. Commit or discard them before updating to the PR head.",
+      );
+    }
+    const headSha = await syncWorktreeToPrHead(this.worktree, this.pr);
+    this.pr = { ...this.pr, headSha };
+    this.prLookup = undefined;
+    return this.prStatus();
   }
 
   terminal(): ShellTerminal {
