@@ -28,7 +28,7 @@ function TerminalPane({ url, autoFocus = true }: { url: string; autoFocus?: bool
     try {
       term.loadAddon(new WebglAddon());
     } catch {}
-    fit.fit();
+    if (container.clientWidth > 0 && container.clientHeight > 0) fit.fit();
 
     const ws = new WebSocket(url);
     const send = (message: ClientMessage) => {
@@ -45,6 +45,7 @@ function TerminalPane({ url, autoFocus = true }: { url: string; autoFocus?: bool
 
     const input = term.onData((data) => send({ type: "input", data }));
     const resizeObserver = new ResizeObserver(() => {
+      if (container.clientWidth === 0 || container.clientHeight === 0) return;
       fit.fit();
       send({ type: "resize", cols: term.cols, rows: term.rows });
     });

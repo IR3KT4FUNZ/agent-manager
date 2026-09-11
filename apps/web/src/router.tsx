@@ -62,23 +62,25 @@ const sessionRoute = createRoute({
 
 function SessionPage() {
   const { sessionId } = sessionRoute.useParams();
-  const [diffPath, setDiffPath] = useState<string | null>(null);
+  const [selectedDiff, setSelectedDiff] = useState<{ path: string } | null>(null);
+  const diffPath = selectedDiff?.path ?? null;
 
   const { data: sessions = [] } = useQuery({ queryKey: ["sessions"], queryFn: listSessions });
   const isPrSession = sessions.some((session) => session.id === sessionId && session.pr);
 
-  useEffect(() => setDiffPath(null), [sessionId]);
+  useEffect(() => setSelectedDiff(null), [sessionId]);
 
   const diffPanel: PanelSpec[] = diffPath
     ? [
         {
           id: "diff",
           title: "Diff",
+          revealKey: selectedDiff,
           headerRight: (
             <DiffPanelHeader
               sessionId={sessionId}
               path={diffPath}
-              onClose={() => setDiffPath(null)}
+              onClose={() => setSelectedDiff(null)}
             />
           ),
           defaultWidth: 720,
@@ -112,7 +114,7 @@ function SessionPage() {
                       key={`changes-${sessionId}`}
                       sessionId={sessionId}
                       selectedPath={diffPath}
-                      onSelect={setDiffPath}
+                      onSelect={(path) => setSelectedDiff({ path })}
                       autoSelectFirst={isPrSession}
                       className="min-h-0 flex-1"
                     />
