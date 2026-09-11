@@ -1,3 +1,4 @@
+import { readSource, SourceError } from "./source";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { createBunWebSocket, serveStatic } from "hono/bun";
@@ -161,6 +162,32 @@ app.get("/api/sessions/:id/diff", async (c) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return c.json({ error: message }, error instanceof NoSuchChangeError ? 404 : 400);
+  }
+});
+
+app.get("/api/sessions/:id/source", async (c) => {
+  const session = manager.get(c.req.param("id"));
+  if (!session) return c.json({ error: "session not found" }, 404);
+  try {
+    return c.json(await readSource(session.cwd, c.req.query("path") ?? ""));
+  } catch (error) {
+    return c.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      error instanceof SourceError ? error.status : 400,
+    );
+  }
+});
+
+app.post("/api/sessions/:id/navigation", async (c) => {
+  const session = manager.get(c.req.param("id"));
+  if (!session) return c.json({ error: "session not found" }, 404);
+  try {
+    return c.json(await session.navigation.navigate(await c.req.json()));
+  } catch (error) {
+    return c.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      error instanceof SourceError ? error.status : 400,
+    );
   }
 });
 

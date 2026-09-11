@@ -1,7 +1,8 @@
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { DiffHunk, DiffLine, FileDiff, PrSide } from "@agent-manager/shared";
 import { buildSideBySideRows, type DiffRow } from "../lib/diffRows";
+import type { CodeView } from "../lib/codeHistory";
 import { getFileDiff } from "../lib/api";
 import { draftStorageKey, usePrReviewDraft, type DraftComment } from "../lib/prReviewDraft";
 import { CommentComposer, DraftCard, ReviewDrawer } from "./PrReview";
@@ -120,7 +121,7 @@ function SideCell({
         data-line={number ?? undefined}
         className={`min-w-0 px-2 whitespace-pre-wrap wrap-anywhere ${selected ? "bg-sky-500/20" : tint.background} ${tint.text}`}
       >
-        {line?.text ?? ""}
+        <span data-code-text>{line?.text ?? ""}</span>
         {line?.noNewline && <span className="text-zinc-600"> ↵ no newline at end of file</span>}
       </div>
     </>
@@ -190,7 +191,45 @@ function HunkRows({ path, hunk, review }: { path: string; hunk: DiffHunk; review
   );
 }
 
-function DiffBody({ diff, review }: { diff: FileDiff; review: Review }) {
+function DiffBody({
+  diff,
+  review,
+  view,
+  onSave,
+}: {
+  diff: FileDiff;
+  review: Review;
+  view?: CodeView;
+  onSave?: (view: Partial<CodeView>) => void;
+}) {
+  const scroll = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (scroll.current) {
+      scroll.current.scrollTop = view?.scrollTop ?? 0;
+      scroll.current.scrollLeft = view?.scrollLeft ?? 0;
+      if (view?.side && view.line && view.endLine) {
+        const start = scroll.current.querySelector(
+          `[data-side="${view.side}"][data-line="${view.line}"] [data-code-text]`,
+        )?.firstChild;
+        const end = scroll.current.querySelector(
+          `[data-side="${view.side}"][data-line="${view.endLine}"] [data-code-text]`,
+        )?.firstChild;
+        if (start && end) {
+          const range = document.createRange();
+          range.setStart(
+            start,
+            Math.min((view.column ?? 1) - 1, start.textContent?.length ?? 0),
+          );
+          range.setEnd(
+            end,
+            Math.min((view.endColumn ?? 1) - 1, end.textContent?.length ?? 0),
+          );
+          window.getSelection()?.removeAllRanges();
+          window.getSelection()?.addRange(range);
+        }
+      }
+    }
+  }, []);
   if (diff.kind === "binary") {
     return (
       <Message>
@@ -201,16 +240,34 @@ function DiffBody({ diff, review }: { diff: FileDiff; review: Review }) {
   if (diff.kind === "too-large") {
     return (
       <Message>
-        File too large to diff — {formatBytes(diff.oldSize)} → {formatBytes(diff.newSize)}.
+        File too large to diff — {formatBytes(diff.oldSize)} →{" "}
+        {formatBytes(diff.newSize)}.
       </Message>
     );
   }
   if (diff.hunks.length === 0) {
-    return <Message>{diff.oldPath ? "Renamed, with no content changes." : "No changes."}</Message>;
+    return (
+      <Message>
+        {diff.oldPath ? "Renamed, with no content changes." : "No changes."}
+      </Message>
+    );
   }
   return (
-    <div className="h-full overflow-auto">
-      <OutdatedThreads threads={review.threads.outdated} sessionId={review.sessionId} />
+    <div
+      ref={scroll}
+      data-current-version={diff.currentVersion}
+      className="h-full overflow-auto"
+      onScroll={(event) =>
+        onSave?.({
+          scrollTop: event.currentTarget.scrollTop,
+          scrollLeft: event.currentTarget.scrollLeft,
+        })
+      }
+    >
+      <OutdatedThreads
+        threads={review.threads.outdated}
+        sessionId={review.sessionId}
+      />
       <div className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] font-mono text-xs leading-5">
         {diff.hunks.map((hunk) => (
           <HunkRows
@@ -225,7 +282,17 @@ function DiffBody({ diff, review }: { diff: FileDiff; review: Review }) {
   );
 }
 
-export function DiffViewer({ sessionId, path }: { sessionId: string; path: string }) {
+export function DiffViewer({
+  sessionId,
+  path,
+  view,
+  onSave,
+}: {
+  sessionId: string;
+  path: string;
+  view?: CodeView;
+  onSave?: (view: Partial<CodeView>) => void;
+}) {
   const { data, error, isLoading } = useFileDiff(sessionId, path);
   const threads = usePrThreads(sessionId, path);
   const { data: status } = useSessionPr(sessionId);
@@ -294,7 +361,7 @@ export function DiffViewer({ sessionId, path }: { sessionId: string; path: strin
         ) : error ? (
           <Message>{(error as Error).message}</Message>
         ) : data ? (
-          <DiffBody diff={data} review={review} />
+          <DiffBody diff={data} review={review} view={view} onSave={onSave} />
         ) : null}
       </div>
       {status?.pr && (
@@ -309,31 +376,8 @@ export function DiffViewer({ sessionId, path }: { sessionId: string; path: strin
   );
 }
 
-export function DiffPanelHeader({
-  sessionId,
-  path,
-  onClose,
-}: {
-  sessionId: string;
-  path: string;
-  onClose: () => void;
-}) {
+export function DiffPathLabel({ sessionId, path }: { sessionId: string; path: string }) {
   const { data } = useFileDiff(sessionId, path);
   const label = data?.oldPath ? `${data.oldPath} → ${path}` : path;
-
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      <span className="truncate font-mono text-[10px] text-zinc-500" title={label}>
-        {label}
-      </span>
-      <button
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={onClose}
-        title="Close the diff"
-        className="shrink-0 rounded px-1 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
-      >
-        ✕
-      </button>
-    </div>
-  );
+  return <span className="truncate font-mono text-[10px] text-zinc-400" title={label}>{label}</span>;
 }

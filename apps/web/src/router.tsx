@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
 import { APP_NAME } from "@agent-manager/shared";
@@ -6,7 +5,8 @@ import { listSessions } from "./lib/api";
 import { Sidebar } from "./components/Sidebar";
 import { SessionShellTerminal, SessionTerminal } from "./components/SessionTerminal";
 import { ChangedFiles, ChangedFilesBase } from "./components/ChangedFiles";
-import { DiffPanelHeader, DiffViewer } from "./components/DiffViewer";
+import { CodePanelHeader, CodeViewer } from "./components/CodeViewer";
+import { useCodeHistory } from "./lib/codeHistory";
 import { PrBadge, PrDesyncBanner } from "./components/PrStatus";
 import { PanelBoard, type PanelSpec } from "./components/PanelBoard";
 import { VerticalSplit } from "./components/VerticalSplit";
@@ -62,29 +62,23 @@ const sessionRoute = createRoute({
 
 function SessionPage() {
   const { sessionId } = sessionRoute.useParams();
-  const [selectedDiff, setSelectedDiff] = useState<{ path: string } | null>(null);
-  const diffPath = selectedDiff?.path ?? null;
+  const { current, history } = useCodeHistory(sessionId);
+  const diffPath = current?.path ?? null;
+  const setDiffPath = (path: string) => history.visit({ mode: "diff", path });
 
   const { data: sessions = [] } = useQuery({ queryKey: ["sessions"], queryFn: listSessions });
   const isPrSession = sessions.some((session) => session.id === sessionId && session.pr);
 
-  useEffect(() => setSelectedDiff(null), [sessionId]);
 
   const diffPanel: PanelSpec[] = diffPath
     ? [
         {
           id: "diff",
-          title: "Diff",
-          revealKey: selectedDiff,
-          headerRight: (
-            <DiffPanelHeader
-              sessionId={sessionId}
-              path={diffPath}
-              onClose={() => setSelectedDiff(null)}
-            />
-          ),
+          revealKey: current,
+          title: current?.mode === "source" ? "Source" : "Diff",
+          headerRight: <CodePanelHeader sessionId={sessionId} />,
           defaultWidth: 720,
-          content: <DiffViewer key={diffPath} sessionId={sessionId} path={diffPath} />,
+          content: <CodeViewer sessionId={sessionId} />,
         },
       ]
     : [];
@@ -114,7 +108,7 @@ function SessionPage() {
                       key={`changes-${sessionId}`}
                       sessionId={sessionId}
                       selectedPath={diffPath}
-                      onSelect={(path) => setSelectedDiff({ path })}
+                      onSelect={setDiffPath}
                       autoSelectFirst={isPrSession}
                       className="min-h-0 flex-1"
                     />

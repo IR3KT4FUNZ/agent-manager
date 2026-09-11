@@ -44,10 +44,14 @@ function TerminalPane({ url, autoFocus = true }: { url: string; autoFocus?: bool
     };
 
     const input = term.onData((data) => send({ type: "input", data }));
+    let resizeFrame = 0;
     const resizeObserver = new ResizeObserver(() => {
-      if (container.clientWidth === 0 || container.clientHeight === 0) return;
-      fit.fit();
-      send({ type: "resize", cols: term.cols, rows: term.rows });
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        if (container.clientWidth === 0 || container.clientHeight === 0) return;
+        fit.fit();
+        send({ type: "resize", cols: term.cols, rows: term.rows });
+      });
     });
     resizeObserver.observe(container);
     const keepalive = setInterval(() => send({ type: "ping" }), 30_000);
@@ -56,6 +60,7 @@ function TerminalPane({ url, autoFocus = true }: { url: string; autoFocus?: bool
     return () => {
       clearInterval(keepalive);
       resizeObserver.disconnect();
+      cancelAnimationFrame(resizeFrame);
       input.dispose();
       ws.close();
       term.dispose();
