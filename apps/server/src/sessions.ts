@@ -1,3 +1,4 @@
+import { AgentQuestions } from "./questions";
 import { CodeNavigation } from "./navigation";
 import { spawn } from "bun-pty";
 import { randomUUID } from "node:crypto";
@@ -92,6 +93,8 @@ export class Session {
   private pty: ReturnType<typeof spawn>;
   private shell?: ShellTerminal;
   readonly navigation: CodeNavigation;
+  readonly questions: AgentQuestions;
+  private disposed = false;
 
   constructor(resolved: ResolvedSession) {
     this.projectId = resolved.projectId;
@@ -111,6 +114,12 @@ export class Session {
       rows: 24,
       cwd: this.cwd,
       env: { ...process.env, TERM: "xterm-256color" } as Record<string, string>,
+    });
+
+    this.questions = new AgentQuestions({
+      agent: this.agent,
+      running: () => !this.disposed && this.status === "running",
+      write: (data) => this.pty.write(data),
     });
 
     this.pty.onData((data: string) => {
@@ -147,6 +156,10 @@ export class Session {
   // what GitHub shows under "Files changed".
   diffBase(): string | undefined {
     return this.pr ? `origin/${this.pr.baseRefName}` : undefined;
+  }
+
+  reviewAssociation(): PrAssociation | null {
+    return this.pr ?? this.prLookup?.pr ?? null;
   }
 
   async prStatus(): Promise<PrStatus> {
@@ -232,6 +245,7 @@ export class Session {
   }
 
   dispose() {
+    this.disposed = true;
     this.navigation.dispose();
     this.shell?.dispose();
     if (this.status === "running") this.pty.kill();
