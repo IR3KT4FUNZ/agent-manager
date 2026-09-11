@@ -62,7 +62,11 @@ function TerminalPane({ url, autoFocus = true }: { url: string; autoFocus?: bool
     };
   }, [url, autoFocus]);
 
-  return <div ref={containerRef} className="h-full w-full bg-[#09090b] p-2" />;
+  return (
+    <div className="h-full w-full bg-[#09090b] p-2">
+      <div ref={containerRef} className="h-full w-full" />
+    </div>
+  );
 }
 
 export function SessionTerminal({ sessionId }: { sessionId: string }) {

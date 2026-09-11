@@ -204,7 +204,7 @@ export function Sidebar() {
             <div key={project.id} className="space-y-1">
               <div className="group flex items-center gap-1 px-2">
                 <span
-                  className="truncate text-xs font-semibold tracking-wide text-zinc-500 uppercase"
+                  className="min-w-0 wrap-anywhere text-xs font-semibold tracking-wide text-zinc-500 uppercase"
                   title={project.path}
                 >
                   {project.name}
@@ -276,7 +276,7 @@ export function Sidebar() {
                         session.status === "running" ? "bg-emerald-500" : "bg-zinc-600"
                       }`}
                     />
-                    <span className="min-w-0 flex-1 truncate">
+                    <span className="min-w-0 flex-1 whitespace-pre-wrap wrap-anywhere">
                       {session.worktree ? `⑂ ${session.title}` : session.title}
                     </span>
                     {session.agent && (
