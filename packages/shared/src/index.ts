@@ -91,6 +91,7 @@ export interface DiffHunk {
 }
 
 export interface FileDiff {
+  currentVersion?: string;
   path: string;
   oldPath?: string;
   status: ChangeStatus;
@@ -204,3 +205,33 @@ export type ServerMessage =
   | { type: "info"; session: SessionInfo }
   | { type: "output"; data: string }
   | { type: "exit"; exitCode: number };
+
+export interface SourceDocument {
+  path: string;
+  content: string;
+  version: string;
+  language: "typescript" | "javascript" | "plaintext";
+}
+
+export interface NavigationRequest {
+  action: "definition" | "references";
+  path: string;
+  line: number;
+  column: number;
+  version: string;
+}
+
+export interface SourceLocation {
+  path: string;
+  line: number;
+  column: number;
+  endLine: number;
+  endColumn: number;
+  version: string;
+  preview: string;
+}
+
+export interface NavigationResult {
+  locations: SourceLocation[];
+  message?: string;
+}

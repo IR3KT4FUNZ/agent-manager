@@ -10,7 +10,8 @@
   "dependencies": {
     "@agent-manager/shared": "workspace:*",
     "bun-pty": "^0.4.10",
-    "hono": "^4.12.31"
+    "hono": "^4.12.31",
+    "typescript": "5.9.3"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14"

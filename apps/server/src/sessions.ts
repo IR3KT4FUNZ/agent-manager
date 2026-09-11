@@ -1,3 +1,4 @@
+import { CodeNavigation } from "./navigation";
 import { spawn } from "bun-pty";
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
@@ -90,6 +91,7 @@ export class Session {
   private subscribers = new Set<Subscriber>();
   private pty: ReturnType<typeof spawn>;
   private shell?: ShellTerminal;
+  readonly navigation: CodeNavigation;
 
   constructor(resolved: ResolvedSession) {
     this.projectId = resolved.projectId;
@@ -98,6 +100,7 @@ export class Session {
     this.model = resolved.model;
     this.reasoningEffort = resolved.reasoningEffort;
     this.cwd = resolved.cwd;
+    this.navigation = new CodeNavigation(this.cwd);
     this.title = resolved.title;
     this.worktree = resolved.worktree;
     this.pr = resolved.pr;
@@ -229,6 +232,7 @@ export class Session {
   }
 
   dispose() {
+    this.navigation.dispose();
     this.shell?.dispose();
     if (this.status === "running") this.pty.kill();
   }

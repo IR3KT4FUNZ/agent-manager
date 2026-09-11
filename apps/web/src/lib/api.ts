@@ -1,4 +1,7 @@
 import type {
+  SourceDocument,
+  NavigationRequest,
+  NavigationResult,
   CodexCatalog,
   CreateSessionRequest,
   FileDiff,
@@ -12,6 +15,15 @@ import type {
   SubmitReviewRequest,
 } from "@agent-manager/shared";
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 async function json<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.text();
@@ -19,7 +31,7 @@ async function json<T>(response: Response): Promise<T> {
     try {
       message = (JSON.parse(body) as { error?: string }).error ?? message;
     } catch {}
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
   return response.json() as Promise<T>;
 }
@@ -104,4 +116,21 @@ export function getFileDiff(id: string, path: string): Promise<FileDiff> {
 
 export function getCodexCatalog(refresh = false): Promise<CodexCatalog> {
   return fetch(`/api/agents/codex${refresh ? "?refresh=true" : ""}`).then((r) => json<CodexCatalog>(r));
+}
+
+export function getSource(id: string, path: string): Promise<SourceDocument> {
+  return fetch(
+    `/api/sessions/${id}/source?path=${encodeURIComponent(path)}`,
+  ).then((r) => json<SourceDocument>(r));
+}
+
+export function navigateCode(
+  id: string,
+  request: NavigationRequest,
+): Promise<NavigationResult> {
+  return fetch(`/api/sessions/${id}/navigation`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(request),
+  }).then((r) => json<NavigationResult>(r));
 }

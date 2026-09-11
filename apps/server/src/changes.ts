@@ -1,3 +1,4 @@
+import { readSource } from "./source";
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import type {
@@ -187,7 +188,9 @@ export async function getFileDiff(
   if (oldSize > MAX_FILE_BYTES || newSize > MAX_FILE_BYTES) return { ...diff, kind: "too-large" };
 
   // `--no-index` reports "files differ" as exit code 1, which is the normal case here.
+  const before = await readSource(cwd, entry.path).catch(() => null);
   const { bytes, exitCode } = await runGitRaw(diffArgs(baseRef, entry), cwd);
+  const after = await readSource(cwd, entry.path).catch(() => null);
   const failed = entry.status === "untracked" ? exitCode > 1 : exitCode !== 0;
   if (failed) throw new Error(`git could not diff '${relPath}'.`);
   if (bytes.length > MAX_FILE_BYTES) return { ...diff, kind: "too-large" };
@@ -196,6 +199,7 @@ export async function getFileDiff(
   if (parsed.isBinary) return { ...diff, kind: "binary" };
   return {
     ...diff,
+    currentVersion: before && before.version === after?.version ? before.version : undefined,
     hunks: parsed.hunks,
     additions: parsed.additions,
     deletions: parsed.deletions,
