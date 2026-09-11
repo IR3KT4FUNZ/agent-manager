@@ -3,6 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import type { DiffHunk, DiffLine, FileDiff } from "@agent-manager/shared";
 import { buildSideBySideRows, type DiffRow } from "../lib/diffRows";
 import { getFileDiff } from "../lib/api";
+import {
+  anchorKey,
+  OutdatedThreads,
+  ThreadCard,
+  usePrThreads,
+  type FileThreads,
+} from "./PrThreads";
 
 const SIDE_TINT = {
   add: { background: "bg-emerald-500/10", text: "text-emerald-200" },
@@ -62,7 +69,22 @@ function SideCell({
   );
 }
 
-function HunkRows({ path, hunk }: { path: string; hunk: DiffHunk }) {
+function rowThreads(threads: FileThreads, row: DiffRow) {
+  const keys: string[] = [];
+  if (row.new?.newLine != null) keys.push(anchorKey("RIGHT", row.new.newLine));
+  if (row.old?.oldLine != null) keys.push(anchorKey("LEFT", row.old.oldLine));
+  return keys.flatMap((key) => threads.byAnchor.get(key) ?? []);
+}
+
+function HunkRows({
+  path,
+  hunk,
+  threads,
+}: {
+  path: string;
+  hunk: DiffHunk;
+  threads: FileThreads;
+}) {
   const rows: DiffRow[] = buildSideBySideRows(hunk);
   return (
     <>
@@ -70,17 +92,27 @@ function HunkRows({ path, hunk }: { path: string; hunk: DiffHunk }) {
         {`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`}
         {hunk.header && ` ${hunk.header}`}
       </div>
-      {rows.map((row, index) => (
-        <Fragment key={index}>
-          <SideCell path={path} side="old" line={row.old} />
-          <SideCell path={path} side="new" line={row.new} />
-        </Fragment>
-      ))}
+      {rows.map((row, index) => {
+        const anchored = rowThreads(threads, row);
+        return (
+          <Fragment key={index}>
+            <SideCell path={path} side="old" line={row.old} />
+            <SideCell path={path} side="new" line={row.new} />
+            {anchored.length > 0 && (
+              <div className="col-span-4 space-y-2 border-y border-zinc-800 bg-zinc-950/80 px-3 py-2">
+                {anchored.map((thread) => (
+                  <ThreadCard key={thread.id} thread={thread} />
+                ))}
+              </div>
+            )}
+          </Fragment>
+        );
+      })}
     </>
   );
 }
 
-function DiffBody({ diff }: { diff: FileDiff }) {
+function DiffBody({ diff, threads }: { diff: FileDiff; threads: FileThreads }) {
   if (diff.kind === "binary") {
     return (
       <Message>
@@ -100,9 +132,15 @@ function DiffBody({ diff }: { diff: FileDiff }) {
   }
   return (
     <div className="h-full overflow-auto">
+      <OutdatedThreads threads={threads.outdated} />
       <div className="grid w-max min-w-full grid-cols-[auto_1fr_auto_1fr] font-mono text-xs leading-5">
         {diff.hunks.map((hunk) => (
-          <HunkRows key={`${hunk.oldStart}-${hunk.newStart}`} path={diff.path} hunk={hunk} />
+          <HunkRows
+            key={`${hunk.oldStart}-${hunk.newStart}`}
+            path={diff.path}
+            hunk={hunk}
+            threads={threads}
+          />
         ))}
       </div>
     </div>
@@ -111,6 +149,7 @@ function DiffBody({ diff }: { diff: FileDiff }) {
 
 export function DiffViewer({ sessionId, path }: { sessionId: string; path: string }) {
   const { data, error, isLoading } = useFileDiff(sessionId, path);
+  const threads = usePrThreads(sessionId, path);
 
   return (
     <div className="h-full bg-zinc-900">
@@ -119,7 +158,7 @@ export function DiffViewer({ sessionId, path }: { sessionId: string; path: strin
       ) : error ? (
         <Message>{(error as Error).message}</Message>
       ) : data ? (
-        <DiffBody diff={data} />
+        <DiffBody diff={data} threads={threads} />
       ) : null}
     </div>
   );

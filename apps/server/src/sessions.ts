@@ -4,6 +4,7 @@ import { basename } from "node:path";
 import type {
   CreateSessionRequest,
   PrAssociation,
+  PrReviewThread,
   PrStatus,
   ServerMessage,
   SessionInfo,
@@ -17,6 +18,7 @@ import {
   syncWorktreeToPrHead,
   type PrLookup,
 } from "./pr";
+import { listPrThreads } from "./prComments";
 import { trimScrollback } from "./scrollback";
 import { ShellTerminal } from "./terminal";
 import { createWorktree, discardWorktree, removeWorktree } from "./worktrees";
@@ -148,6 +150,12 @@ export class Session {
     const { status, lookup } = await loadPrStatus(this.worktree, this.pr, this.prLookup);
     this.prLookup = lookup;
     return status;
+  }
+
+  async prThreads(): Promise<PrReviewThread[]> {
+    const { pr } = await this.prStatus();
+    if (!pr || !this.worktree) return [];
+    return listPrThreads(this.worktree.repoRoot, pr);
   }
 
   async syncToPrHead(): Promise<PrStatus> {

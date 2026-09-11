@@ -1,0 +1,62 @@
+[
+  {
+    "id": 101,
+    "path": "apps/server/src/github.ts",
+    "line": 12,
+    "original_line": 12,
+    "start_line": null,
+    "side": "RIGHT",
+    "body": "Should this be a constant?",
+    "created_at": "2026-08-12T10:00:00Z",
+    "html_url": "https://github.com/octo/repo/pull/7#discussion_r101",
+    "user": { "login": "reviewer" }
+  },
+  {
+    "id": 102,
+    "in_reply_to_id": 101,
+    "path": "apps/server/src/github.ts",
+    "line": 12,
+    "original_line": 12,
+    "side": "RIGHT",
+    "body": "Good catch, pulled it out.",
+    "created_at": "2026-08-12T10:05:00Z",
+    "html_url": "https://github.com/octo/repo/pull/7#discussion_r102",
+    "user": { "login": "author" }
+  },
+  {
+    "id": 103,
+    "in_reply_to_id": 102,
+    "path": "apps/server/src/github.ts",
+    "line": 12,
+    "original_line": 12,
+    "side": "RIGHT",
+    "body": "Thanks!",
+    "created_at": "2026-08-12T10:06:00Z",
+    "html_url": "https://github.com/octo/repo/pull/7#discussion_r103",
+    "user": { "login": "reviewer" }
+  },
+  {
+    "id": 104,
+    "path": "apps/server/src/github.ts",
+    "line": null,
+    "original_line": 4,
+    "side": "RIGHT",
+    "body": "This import moved since the review.",
+    "created_at": "2026-08-12T10:10:00Z",
+    "html_url": "https://github.com/octo/repo/pull/7#discussion_r104",
+    "user": { "login": "reviewer" }
+  },
+  {
+    "id": 105,
+    "path": "README.md",
+    "line": 30,
+    "original_line": 30,
+    "start_line": 28,
+    "start_side": "LEFT",
+    "side": "LEFT",
+    "body": "These three lines are stale.",
+    "created_at": "2026-08-12T10:12:00Z",
+    "html_url": "https://github.com/octo/repo/pull/7#discussion_r105",
+    "user": { "login": "reviewer" }
+  }
+]

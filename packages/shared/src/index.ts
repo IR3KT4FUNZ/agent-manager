@@ -115,6 +115,34 @@ export interface PrAssociation {
   author: string;
 }
 
+export type PrSide = "LEFT" | "RIGHT";
+
+export interface PrCommentAnchor {
+  path: string;
+  line: number;
+  side: PrSide;
+  startLine?: number;
+  startSide?: PrSide;
+}
+
+export interface PrReviewComment {
+  id: number;
+  author: string;
+  body: string;
+  createdAt: string;
+  url: string;
+}
+
+export interface PrReviewThread {
+  id: number;
+  path: string;
+  line: number | null;
+  side: PrSide;
+  startLine?: number;
+  outdated: boolean;
+  comments: PrReviewComment[];
+}
+
 export interface PrStatus {
   pr: PrAssociation | null;
   localDirty: boolean;
