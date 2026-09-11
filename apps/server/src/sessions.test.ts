@@ -5,7 +5,13 @@ import { basename, join } from "node:path";
 import { ProjectManager } from "./projects";
 import { SessionManager } from "./sessions";
 import { stubGh, useStubGh } from "./testGh";
-import { removeTempDirs, tempDir, tempRepo, tempRepoWithPullRequest } from "./testRepo";
+import {
+  pushToPullRequest,
+  removeTempDirs,
+  tempDir,
+  tempRepo,
+  tempRepoWithPullRequest,
+} from "./testRepo";
 import { branchExists } from "./worktrees";
 
 const workspaceRoots: string[] = [];
@@ -54,7 +60,7 @@ test("closing a project kills its sessions and removes their worktrees, keeping 
   expect(await branchExists(repo, branch)).toBe(true);
 });
 
-function ghStubForPullRequest(headSha: string) {
+function ghStubForPullRequest(headSha: string, remoteSha: string = headSha) {
   const view = JSON.stringify({
     number: 1,
     title: "Add a widget",
@@ -71,7 +77,7 @@ function ghStubForPullRequest(headSha: string) {
     [
       'case "$*" in',
       `  "repo view --json nameWithOwner") echo '{"nameWithOwner":"octo/repo"}' ;;`,
-      `  "pr view 1 --json headRefOid") echo '{"headRefOid":"${headSha}"}' ;;`,
+      `  "pr view 1 --json headRefOid") echo '{"headRefOid":"${remoteSha}"}' ;;`,
       `  *) echo '${view}' ;;`,
       "esac",
     ].join("\n"),
@@ -100,6 +106,39 @@ test("a pull request session runs on the PR head and refuses to sync over local 
     writeFileSync(join(session.cwd, "widget.txt"), "edited\n");
     expect((await session.prStatus()).localDirty).toBe(true);
     await expect(session.syncToPrHead()).rejects.toThrow(/local changes/);
+  } finally {
+    restore();
+    await sessions.disposeProject(project.id);
+  }
+});
+
+test("a review is refused once the PR head has moved, unless the reviewer insists", async () => {
+  const { repo, headSha } = await tempRepoWithPullRequest();
+  workspaceRoots.push(join(homedir(), "agent-manager", "workspaces", basename(repo)));
+  const project = await new ProjectManager().open(repo);
+  const sessions = new SessionManager();
+  let restore = useStubGh(ghStubForPullRequest(headSha));
+
+  try {
+    const session = await sessions.create(project, {
+      projectId: project.id,
+      command: "cat",
+      prNumber: 1,
+    });
+
+    const pushedSha = await pushToPullRequest(repo, "extra.txt");
+    restore();
+    const stub = ghStubForPullRequest(headSha, pushedSha);
+    restore = useStubGh(stub);
+
+    const review = { event: "COMMENT" as const, body: "Looks fine.", comments: [] };
+    await expect(session.submitReview(review)).rejects.toThrow(/moved on GitHub/);
+
+    await session.submitReview({ ...review, allowStale: true });
+    const submitted = stub.calls().find((call) => call[1]?.endsWith("/reviews"));
+    expect(submitted).toBeDefined();
+    // The comments still anchor to the head this session actually reviewed.
+    expect(JSON.parse(stub.stdin())).toMatchObject({ commit_id: headSha, event: "COMMENT" });
   } finally {
     restore();
     await sessions.disposeProject(project.id);

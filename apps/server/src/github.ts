@@ -43,13 +43,32 @@ export async function runGh(
   return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode: await proc.exited };
 }
 
+// A failing `gh api` prints a terse line on stderr but the useful part — the
+// API's own `errors` — in the JSON body on stdout.
+function apiErrorDetail(stdout: string): string {
+  try {
+    const body = JSON.parse(stdout) as {
+      message?: string;
+      errors?: (string | { message?: string })[];
+    };
+    const errors = (body.errors ?? [])
+      .map((error) => (typeof error === "string" ? error : error.message))
+      .filter((error): error is string => Boolean(error));
+    return errors.length > 0 ? errors.join("; ") : (body.message ?? "");
+  } catch {
+    return "";
+  }
+}
+
 export async function runGhJson<T>(
   args: string[],
   cwd: string,
   options: { stdin?: string } = {},
 ): Promise<T> {
   const { stdout, stderr, exitCode } = await runGh(args, cwd, options);
-  if (exitCode !== 0) throw new Error(friendlyGhError(stderr || stdout));
+  if (exitCode !== 0) {
+    throw new Error(friendlyGhError([apiErrorDetail(stdout), stderr].filter(Boolean).join("\n")));
+  }
   try {
     return JSON.parse(stdout) as T;
   } catch {

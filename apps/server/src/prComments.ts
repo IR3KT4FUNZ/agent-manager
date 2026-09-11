@@ -1,4 +1,9 @@
-import type { PrAssociation, PrReviewThread, PrSide } from "@agent-manager/shared";
+import type {
+  PrAssociation,
+  PrReviewThread,
+  PrSide,
+  SubmitReviewRequest,
+} from "@agent-manager/shared";
 import { runGhJson } from "./github";
 
 export interface RawReviewComment {
@@ -65,4 +70,82 @@ export async function listPrThreads(
     repoRoot,
   );
   return groupThreads(comments);
+}
+
+export interface ReviewPayloadComment {
+  path: string;
+  line: number;
+  side: PrSide;
+  start_line?: number;
+  start_side?: PrSide;
+  body: string;
+}
+
+export interface ReviewPayload {
+  commit_id: string;
+  event: string;
+  body?: string;
+  comments: ReviewPayloadComment[];
+}
+
+// The modern review API anchors comments with line/side (never the legacy
+// `position`), and takes the whole review in one request so GitHub sends one
+// notification instead of one per comment.
+export function buildReviewPayload(headSha: string, request: SubmitReviewRequest): ReviewPayload {
+  const body = request.body?.trim() ?? "";
+  const comments: ReviewPayloadComment[] = request.comments.map((comment) => ({
+    path: comment.path,
+    line: comment.line,
+    side: comment.side,
+    ...(comment.startLine !== undefined && comment.startLine < comment.line
+      ? { start_line: comment.startLine, start_side: comment.startSide ?? comment.side }
+      : {}),
+    body: comment.body,
+  }));
+
+  if (comments.length === 0 && body === "" && request.event !== "APPROVE") {
+    throw new Error("Write a summary or at least one comment before submitting a review.");
+  }
+
+  return {
+    commit_id: headSha,
+    event: request.event,
+    ...(body === "" ? {} : { body }),
+    comments,
+  };
+}
+
+export async function submitPrReview(
+  repoRoot: string,
+  pr: PrAssociation,
+  request: SubmitReviewRequest,
+): Promise<void> {
+  const payload = buildReviewPayload(pr.headSha, request);
+  await runGhJson(
+    ["api", `repos/${pr.baseRepo}/pulls/${pr.number}/reviews`, "--method", "POST", "--input", "-"],
+    repoRoot,
+    { stdin: JSON.stringify(payload) },
+  );
+}
+
+// The reviews API cannot reply to an existing thread; replies go to the
+// comments endpoint with in_reply_to.
+export async function replyToPrComment(
+  repoRoot: string,
+  pr: PrAssociation,
+  commentId: number,
+  body: string,
+): Promise<void> {
+  if (!body.trim()) throw new Error("A reply cannot be empty.");
+  await runGhJson(
+    [
+      "api",
+      `repos/${pr.baseRepo}/pulls/${pr.number}/comments`,
+      "-f",
+      `body=${body}`,
+      "-F",
+      `in_reply_to=${commentId}`,
+    ],
+    repoRoot,
+  );
 }

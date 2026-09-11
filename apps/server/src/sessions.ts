@@ -7,6 +7,7 @@ import type {
   PrReviewThread,
   PrStatus,
   ServerMessage,
+  SubmitReviewRequest,
   SessionInfo,
   WorktreeInfo,
 } from "@agent-manager/shared";
@@ -18,7 +19,7 @@ import {
   syncWorktreeToPrHead,
   type PrLookup,
 } from "./pr";
-import { listPrThreads } from "./prComments";
+import { listPrThreads, replyToPrComment, submitPrReview } from "./prComments";
 import { trimScrollback } from "./scrollback";
 import { ShellTerminal } from "./terminal";
 import { createWorktree, discardWorktree, removeWorktree } from "./worktrees";
@@ -156,6 +157,29 @@ export class Session {
     const { pr } = await this.prStatus();
     if (!pr || !this.worktree) return [];
     return listPrThreads(this.worktree.repoRoot, pr);
+  }
+
+  private async reviewTarget(): Promise<{ pr: PrAssociation; repoRoot: string; status: PrStatus }> {
+    const status = await this.prStatus();
+    if (!status.pr || !this.worktree) {
+      throw new Error("This session is not reviewing a pull request.");
+    }
+    return { pr: status.pr, repoRoot: this.worktree.repoRoot, status };
+  }
+
+  async submitReview(request: SubmitReviewRequest): Promise<void> {
+    const { pr, repoRoot, status } = await this.reviewTarget();
+    if (status.remoteAdvanced && !request.allowStale) {
+      throw new Error(
+        "The pull request head moved on GitHub since this session checked it out. Update to the PR head, or submit anyway to comment on the head you reviewed.",
+      );
+    }
+    await submitPrReview(repoRoot, pr, request);
+  }
+
+  async replyToComment(commentId: number, body: string): Promise<void> {
+    const { pr, repoRoot } = await this.reviewTarget();
+    await replyToPrComment(repoRoot, pr, commentId, body);
   }
 
   async syncToPrHead(): Promise<PrStatus> {

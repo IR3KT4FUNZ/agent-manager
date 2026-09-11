@@ -118,6 +118,21 @@ describe("runGhJson", () => {
     }
   });
 
+  test("surfaces what the API said, not just gh's status line", async () => {
+    const restore = useStubGh(
+      stubGh(
+        `echo '{"message":"Unprocessable Entity","errors":["Can not approve your own pull request"]}'; echo 'gh: Unprocessable Entity (HTTP 422)' >&2; exit 1`,
+      ),
+    );
+    try {
+      await expect(runGhJson(["api", "x", "--method", "POST"], tmpdir())).rejects.toThrow(
+        "Can not approve your own pull request",
+      );
+    } finally {
+      restore();
+    }
+  });
+
   test("turns a gh failure into a friendly error", async () => {
     const restore = useStubGh(stubGh("echo 'HTTP 404: Not Found' >&2; exit 1"));
     try {
