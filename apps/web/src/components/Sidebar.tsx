@@ -6,17 +6,27 @@ import {
   closeProject,
   createSession,
   deleteSession,
+  getGithubStatus,
   listProjects,
   listSessions,
   openProject,
 } from "../lib/api";
 import { isTauri } from "../lib/platform";
+import { OpenPrPicker } from "./OpenPrPicker";
 
 export function Sidebar() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [pickingDirectory, setPickingDirectory] = useState(false);
   const [directory, setDirectory] = useState("");
+  const [prPickerFor, setPrPickerFor] = useState<string | null>(null);
+
+  const { data: github } = useQuery({
+    queryKey: ["github-status"],
+    queryFn: getGithubStatus,
+    staleTime: Infinity,
+  });
+  const githubReady = !github || (github.installed && github.authenticated);
 
   const { data: projects = [] } = useQuery({
     queryKey: ["projects"],
@@ -57,6 +67,15 @@ export function Sidebar() {
     onSuccess: openSession,
   });
 
+  const openPr = useMutation({
+    mutationFn: (request: { projectId: string; prNumber: string | number }) =>
+      createSession(request),
+    onSuccess: (session) => {
+      setPrPickerFor(null);
+      openSession(session);
+    },
+  });
+
   const close = useMutation({
     mutationFn: closeProject,
     onSuccess: () => {
@@ -73,7 +92,11 @@ export function Sidebar() {
     },
   });
 
-  const error = (open.error ?? addSession.error ?? close.error ?? remove.error) as Error | null;
+  const error = (open.error ??
+    addSession.error ??
+    openPr.error ??
+    close.error ??
+    remove.error) as Error | null;
 
   async function startOpenProject() {
     if (isTauri) {
@@ -145,6 +168,26 @@ export function Sidebar() {
                   {project.name}
                 </span>
                 <span className="flex-1" />
+                {project.isRepo && (
+                  <button
+                    onClick={() =>
+                      setPrPickerFor((current) => (current === project.id ? null : project.id))
+                    }
+                    disabled={!githubReady || openPr.isPending}
+                    className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] leading-none font-semibold transition-colors disabled:border-zinc-800 disabled:text-zinc-700 ${
+                      prPickerFor === project.id
+                        ? "border-zinc-600 bg-zinc-800 text-zinc-100"
+                        : "border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-100"
+                    }`}
+                    title={
+                      githubReady
+                        ? "Review a GitHub pull request in this project"
+                        : (github?.message ?? "GitHub CLI unavailable")
+                    }
+                  >
+                    PR
+                  </button>
+                )}
                 <button
                   onClick={() => addSession.mutate(project.id)}
                   disabled={addSession.isPending}
@@ -161,6 +204,19 @@ export function Sidebar() {
                   ×
                 </button>
               </div>
+
+              {prPickerFor === project.id && (
+                <OpenPrPicker
+                  projectId={project.id}
+                  pending={openPr.isPending}
+                  onOpen={(prNumber) => openPr.mutate({ projectId: project.id, prNumber })}
+                  onCancel={() => setPrPickerFor(null)}
+                />
+              )}
+
+              {openPr.isPending && openPr.variables?.projectId === project.id && (
+                <p className="px-2 py-1 text-xs text-zinc-500">Checking out the pull request…</p>
+              )}
 
               {projectSessions.length === 0 ? (
                 <p className="px-2 py-1 text-xs text-zinc-600">No sessions yet</p>

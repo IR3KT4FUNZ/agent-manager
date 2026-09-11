@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import type {
   CreateSessionRequest,
+  PrAssociation,
   ServerMessage,
   SessionInfo,
   WorktreeInfo,
 } from "@agent-manager/shared";
 import type { Project } from "./projects";
+import { checkoutPrWorktree, resolvePrAssociation } from "./pr";
 import { trimScrollback } from "./scrollback";
 import { ShellTerminal } from "./terminal";
 import { createWorktree, discardWorktree, removeWorktree } from "./worktrees";
@@ -21,6 +23,7 @@ interface ResolvedSession {
   cwd: string;
   title: string;
   worktree?: WorktreeInfo;
+  pr?: PrAssociation;
 }
 
 async function resolveSession(
@@ -29,6 +32,22 @@ async function resolveSession(
 ): Promise<ResolvedSession> {
   const command = request.command ?? "claude";
   const args = request.args ?? [];
+  const base = { projectId: project.id, command, args };
+
+  if (request.prNumber !== undefined && String(request.prNumber).trim() !== "") {
+    if (!project.repoRoot) {
+      throw new Error("Pull requests can only be reviewed in a git repository.");
+    }
+    const pr = await resolvePrAssociation(project.repoRoot, String(request.prNumber));
+    const worktree = await checkoutPrWorktree(project.repoRoot, pr);
+    return {
+      ...base,
+      cwd: worktree.path,
+      title: request.title ?? `#${pr.number} ${pr.title}`,
+      worktree,
+      pr,
+    };
+  }
 
   let cwd = project.root;
   let worktree: WorktreeInfo | undefined;
@@ -38,7 +57,7 @@ async function resolveSession(
   }
 
   const title = request.title ?? worktree?.branch ?? `${basename(command)} · ${basename(cwd)}`;
-  return { projectId: project.id, command, args, cwd, title, worktree };
+  return { ...base, cwd, title, worktree };
 }
 
 export class Session {
@@ -49,6 +68,7 @@ export class Session {
   readonly cwd: string;
   readonly title: string;
   readonly worktree?: WorktreeInfo;
+  readonly pr?: PrAssociation;
   status: "running" | "exited" = "running";
   exitCode: number | null = null;
 
@@ -63,6 +83,7 @@ export class Session {
     this.cwd = resolved.cwd;
     this.title = resolved.title;
     this.worktree = resolved.worktree;
+    this.pr = resolved.pr;
 
     this.pty = spawn(this.command, resolved.args, {
       name: "xterm-256color",
@@ -95,7 +116,14 @@ export class Session {
       exitCode: this.exitCode,
       createdAt: this.createdAt,
       worktree: this.worktree,
+      pr: this.pr,
     };
+  }
+
+  // PR sessions diff against the PR's base branch, so the changed files match
+  // what GitHub shows under "Files changed".
+  diffBase(): string | undefined {
+    return this.pr ? `origin/${this.pr.baseRefName}` : undefined;
   }
 
   terminal(): ShellTerminal {
