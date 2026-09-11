@@ -12,6 +12,7 @@ import type {
   WorktreeInfo,
 } from "@agent-manager/shared";
 import type { Project } from "./projects";
+import { resolveAgentLaunch, type AgentLaunch } from "./agents";
 import {
   checkoutPrWorktree,
   loadPrStatus,
@@ -26,10 +27,8 @@ import { createWorktree, discardWorktree, removeWorktree } from "./worktrees";
 
 type Subscriber = (message: ServerMessage) => void;
 
-interface ResolvedSession {
+interface ResolvedSession extends AgentLaunch {
   projectId: string;
-  command: string;
-  args: string[];
   cwd: string;
   title: string;
   worktree?: WorktreeInfo;
@@ -39,10 +38,11 @@ interface ResolvedSession {
 async function resolveSession(
   project: Project,
   request: CreateSessionRequest,
+  resolveLaunch: typeof resolveAgentLaunch,
 ): Promise<ResolvedSession> {
-  const command = request.command ?? "claude";
-  const args = request.args ?? [];
-  const base = { projectId: project.id, command, args };
+  const launch = await resolveLaunch(request, project.root);
+  const { command } = launch;
+  const base = { projectId: project.id, ...launch };
 
   if (request.prNumber !== undefined && String(request.prNumber).trim() !== "") {
     if (!project.repoRoot) {
@@ -75,6 +75,9 @@ export class Session {
   readonly createdAt = new Date().toISOString();
   readonly projectId: string;
   readonly command: string;
+  readonly agent: AgentLaunch["agent"];
+  readonly model?: string;
+  readonly reasoningEffort?: string;
   readonly cwd: string;
   readonly title: string;
   readonly worktree?: WorktreeInfo;
@@ -91,17 +94,20 @@ export class Session {
   constructor(resolved: ResolvedSession) {
     this.projectId = resolved.projectId;
     this.command = resolved.command;
+    this.agent = resolved.agent;
+    this.model = resolved.model;
+    this.reasoningEffort = resolved.reasoningEffort;
     this.cwd = resolved.cwd;
     this.title = resolved.title;
     this.worktree = resolved.worktree;
     this.pr = resolved.pr;
 
-    this.pty = spawn(this.command, resolved.args, {
+    this.pty = spawn(resolved.executable ?? this.command, resolved.args, {
       name: "xterm-256color",
       cols: 80,
       rows: 24,
       cwd: this.cwd,
-      env: process.env as Record<string, string>,
+      env: { ...process.env, TERM: "xterm-256color" } as Record<string, string>,
     });
 
     this.pty.onData((data: string) => {
@@ -122,6 +128,9 @@ export class Session {
       projectId: this.projectId,
       title: this.title,
       command: this.command,
+      agent: this.agent,
+      model: this.model,
+      reasoningEffort: this.reasoningEffort,
       cwd: this.cwd,
       status: this.status,
       exitCode: this.exitCode,
@@ -230,10 +239,12 @@ export class Session {
 }
 
 export class SessionManager {
+  constructor(private readonly resolveLaunch = resolveAgentLaunch) {}
+
   private sessions = new Map<string, Session>();
 
   async create(project: Project, request: CreateSessionRequest): Promise<Session> {
-    const resolved = await resolveSession(project, request);
+    const resolved = await resolveSession(project, request, this.resolveLaunch);
     let session: Session;
     try {
       session = new Session(resolved);

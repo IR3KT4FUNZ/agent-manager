@@ -1,18 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import type { SessionInfo } from "@agent-manager/shared";
+import type { AgentSelection, SessionInfo } from "@agent-manager/shared";
 import {
   closeProject,
   createSession,
   deleteSession,
   getGithubStatus,
+  getCodexCatalog,
   listProjects,
   listSessions,
   openProject,
 } from "../lib/api";
 import { isTauri } from "../lib/platform";
 import { OpenPrPicker } from "./OpenPrPicker";
+import { AgentControls } from "./AgentControls";
+import { launchSelection, reconcileAgentPreferences, useAgentPreferences } from "../lib/agentPreferences";
 
 export function Sidebar() {
   const queryClient = useQueryClient();
@@ -20,6 +23,35 @@ export function Sidebar() {
   const [pickingDirectory, setPickingDirectory] = useState(false);
   const [directory, setDirectory] = useState("");
   const [prPickerFor, setPrPickerFor] = useState<string | null>(null);
+  const { preferences, setPreferences } = useAgentPreferences();
+  const [agentNotice, setAgentNotice] = useState("");
+  const catalog = useQuery({
+    queryKey: ["codex-catalog"],
+    queryFn: () => getCodexCatalog(),
+    enabled: preferences.agent === "codex",
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const refreshCatalog = useMutation({
+    mutationFn: () => getCodexCatalog(true),
+    onSuccess: (data) => queryClient.setQueryData(["codex-catalog"], data),
+  });
+  useEffect(() => {
+    if (!catalog.data?.installed || catalog.data.error) return;
+    const next = reconcileAgentPreferences(preferences, catalog.data.models);
+    if (next !== preferences) {
+      setAgentNotice(next.model
+        ? "The saved reasoning effort is unavailable. Using this model's recommended effort."
+        : "The saved model is unavailable. Using Codex settings.");
+      setPreferences(next);
+    }
+  }, [catalog.data, preferences, setPreferences]);
+  const canLaunch = preferences.agent === "claude" || (
+    catalog.data?.installed === true && (!preferences.model || (
+      !catalog.data.error && catalog.data.models.some((model) => model.model === preferences.model)
+    ))
+  );
+  const selection = () => launchSelection(preferences);
 
   const { data: github } = useQuery({
     queryKey: ["github-status"],
@@ -51,9 +83,9 @@ export function Sidebar() {
   }
 
   const open = useMutation({
-    mutationFn: async (path?: string) => {
+    mutationFn: async ({ path, agent }: { path?: string; agent: AgentSelection }) => {
       const project = await openProject(path);
-      return createSession({ projectId: project.id });
+      return createSession({ projectId: project.id, ...agent });
     },
     onSuccess: (session) => {
       setPickingDirectory(false);
@@ -63,12 +95,12 @@ export function Sidebar() {
   });
 
   const addSession = useMutation({
-    mutationFn: (projectId: string) => createSession({ projectId }),
+    mutationFn: (request: { projectId: string } & AgentSelection) => createSession(request),
     onSuccess: openSession,
   });
 
   const openPr = useMutation({
-    mutationFn: (request: { projectId: string; prNumber: string | number }) =>
+    mutationFn: (request: { projectId: string; prNumber: string | number } & AgentSelection) =>
       createSession(request),
     onSuccess: (session) => {
       setPrPickerFor(null);
@@ -100,9 +132,10 @@ export function Sidebar() {
 
   async function startOpenProject() {
     if (isTauri) {
+      const agent = selection();
       const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
       const selected = await openDialog({ directory: true, title: "Choose a project folder" });
-      if (typeof selected === "string") open.mutate(selected);
+      if (typeof selected === "string") open.mutate({ path: selected, agent });
     } else {
       setPickingDirectory(true);
     }
@@ -111,11 +144,20 @@ export function Sidebar() {
   return (
     <aside className="flex h-full flex-col bg-zinc-900">
       <div className="space-y-2 p-3">
+        <AgentControls
+          preferences={preferences}
+          onChange={(next) => { setAgentNotice(""); setPreferences(next); }}
+          catalog={catalog.data}
+          loading={catalog.isFetching || refreshCatalog.isPending}
+          error={(refreshCatalog.error ?? catalog.error)?.message}
+          notice={agentNotice}
+          onRetry={() => refreshCatalog.mutate()}
+        />
         {pickingDirectory ? (
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              open.mutate(directory.trim() || undefined);
+              if (canLaunch) open.mutate({ path: directory.trim() || undefined, agent: selection() });
             }}
             className="space-y-2"
           >
@@ -129,7 +171,7 @@ export function Sidebar() {
             <div className="flex gap-2">
               <button
                 type="submit"
-                disabled={open.isPending}
+                disabled={open.isPending || !canLaunch}
                 className="flex-1 rounded-md bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-white disabled:opacity-50"
               >
                 {open.isPending ? "Opening…" : "Open"}
@@ -146,7 +188,7 @@ export function Sidebar() {
         ) : (
           <button
             onClick={startOpenProject}
-            disabled={open.isPending}
+            disabled={open.isPending || !canLaunch}
             className="w-full rounded-md bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-white disabled:opacity-50"
           >
             {open.isPending ? "Opening…" : "New project"}
@@ -173,7 +215,7 @@ export function Sidebar() {
                     onClick={() =>
                       setPrPickerFor((current) => (current === project.id ? null : project.id))
                     }
-                    disabled={!githubReady || openPr.isPending}
+                    disabled={!githubReady || openPr.isPending || !canLaunch}
                     className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] leading-none font-semibold transition-colors disabled:border-zinc-800 disabled:text-zinc-700 ${
                       prPickerFor === project.id
                         ? "border-zinc-600 bg-zinc-800 text-zinc-100"
@@ -189,8 +231,8 @@ export function Sidebar() {
                   </button>
                 )}
                 <button
-                  onClick={() => addSession.mutate(project.id)}
-                  disabled={addSession.isPending}
+                  onClick={() => addSession.mutate({ projectId: project.id, ...selection() })}
+                  disabled={addSession.isPending || !canLaunch}
                   className="shrink-0 rounded px-1 text-xs leading-none text-zinc-500 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-zinc-100 disabled:text-zinc-700"
                   title="New session in this project"
                 >
@@ -208,8 +250,8 @@ export function Sidebar() {
               {prPickerFor === project.id && (
                 <OpenPrPicker
                   projectId={project.id}
-                  pending={openPr.isPending}
-                  onOpen={(prNumber) => openPr.mutate({ projectId: project.id, prNumber })}
+                  pending={openPr.isPending || !canLaunch}
+                  onOpen={(prNumber) => { if (canLaunch) openPr.mutate({ projectId: project.id, prNumber, ...selection() }); }}
                   onCancel={() => setPrPickerFor(null)}
                 />
               )}
@@ -237,6 +279,14 @@ export function Sidebar() {
                     <span className="min-w-0 flex-1 truncate">
                       {session.worktree ? `⑂ ${session.title}` : session.title}
                     </span>
+                    {session.agent && (
+                      <span
+                        className="shrink-0 rounded border border-zinc-700 px-1 py-0.5 text-[9px] text-zinc-500"
+                        title={`Launch settings: ${session.agent}${session.model ? ` · ${session.model} · ${session.reasoningEffort}` : " · CLI defaults"}`}
+                      >
+                        {session.agent === "codex" ? "Codex" : "Claude"}
+                      </span>
+                    )}
                     <button
                       onClick={(event) => {
                         event.preventDefault();
