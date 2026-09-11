@@ -12,7 +12,9 @@ import {
   tempRepo,
   tempRepoWithPullRequest,
 } from "./testRepo";
-import { branchExists } from "./worktrees";
+import { branchExists, runGit } from "./worktrees";
+import { resolveAgentLaunch } from "./agents";
+import { fakeCodex, testModel } from "./testCodex";
 
 const workspaceRoots: string[] = [];
 
@@ -88,16 +90,22 @@ test("a pull request session runs on the PR head and refuses to sync over local 
   const { repo, headSha } = await tempRepoWithPullRequest();
   workspaceRoots.push(join(homedir(), "agent-manager", "workspaces", basename(repo)));
   const project = await new ProjectManager().open(repo);
-  const sessions = new SessionManager();
+  const fake = fakeCodex();
+  const sessions = new SessionManager((request, cwd) => resolveAgentLaunch(request, cwd, {
+    findCommand: () => fake.path,
+    catalog: async () => ({ installed: true, models: [testModel] }),
+  }));
   const restore = useStubGh(ghStubForPullRequest(headSha));
 
   try {
     const session = await sessions.create(project, {
       projectId: project.id,
-      command: "cat",
+      agent: "codex",
+      model: testModel.model,
       prNumber: 1,
     });
 
+    expect(session.info()).toMatchObject({ agent: "codex", model: testModel.model, reasoningEffort: "medium" });
     expect(session.title).toBe("#1 Add a widget");
     expect(session.worktree?.branch).toBe("pr-1-feature");
     expect(session.pr).toMatchObject({ number: 1, headSha, baseRefName: "main" });
@@ -156,4 +164,78 @@ test("a session in a non-repo project runs in the project directory", async () =
   expect(session.cwd).toBe(dir);
 
   await sessions.dispose(session.id);
+});
+
+async function waitUntil(condition: () => boolean) {
+  const deadline = Date.now() + 3000;
+  while (!condition() && Date.now() < deadline) await Bun.sleep(10);
+  expect(condition()).toBe(true);
+}
+
+test("selected agents run interactively in isolated worktrees and expose launch metadata", async () => {
+  const { repo, projects } = await openTempRepoProject();
+  const project = await projects.open(repo);
+  const fake = fakeCodex();
+  const sessions = new SessionManager((request, cwd) => resolveAgentLaunch(request, cwd, {
+    findCommand: () => fake.path,
+    catalog: async () => ({ installed: true, models: [testModel] }),
+  }));
+  try {
+    for (const agent of ["claude", "codex"] as const) {
+      const session = await sessions.create(project, {
+        projectId: project.id, agent,
+        ...(agent === "codex" ? { model: testModel.model, reasoningEffort: "high" } : {}),
+      });
+      let output = "";
+      const detach = session.attach((message) => { if (message.type === "output") output += message.data; });
+      await waitUntil(() => output.includes("FAKE_AGENT_READY"));
+      session.resize(120, 40);
+      session.write("hello agent\n");
+      await waitUntil(() => output.includes("ECHO:hello agent"));
+      expect(session.info().agent).toBe(agent);
+      expect(fake.launches().at(-1)).toEqual({
+        cwd: session.cwd,
+        term: "xterm-256color",
+        args: agent === "codex" ? ["--no-alt-screen", "--model", "test-model", "-c", 'model_reasoning_effort="high"'] : [],
+      });
+      detach();
+      let replay = "";
+      session.attach((message) => { if (message.type === "output") replay += message.data; })();
+      expect(replay).toContain("ECHO:hello agent");
+    }
+    expect(new Set(sessions.list().map((session) => session.cwd)).size).toBe(2);
+  } finally {
+    await sessions.disposeProject(project.id);
+  }
+});
+
+test("invalid selections fail before fetching a PR or creating a worktree", async () => {
+  const { repo, projects } = await openTempRepoProject();
+  const project = await projects.open(repo);
+  const stub = ghStubForPullRequest("unused");
+  const restore = useStubGh(stub);
+  const sessions = new SessionManager((request, cwd) => resolveAgentLaunch(request, cwd, {
+    findCommand: () => "/bin/cat",
+    catalog: async () => ({ installed: true, models: [testModel] }),
+  }));
+  try {
+    for (const prNumber of [undefined, 1]) {
+      await expect(sessions.create(project, { projectId: project.id, agent: "codex", model: "missing", prNumber })).rejects.toThrow(/unavailable/);
+    }
+    expect(stub.calls()).toEqual([]);
+    expect((await runGit(["branch", "--format=%(refname:short)"], repo)).stdout).toBe("main");
+    expect(sessions.list()).toEqual([]);
+  } finally {
+    restore();
+  }
+});
+
+test("a PTY spawn failure discards its new worktree and branch", async () => {
+  const { repo, projects } = await openTempRepoProject();
+  const project = await projects.open(repo);
+  const sessions = new SessionManager(async () => ({ agent: "codex", command: "/nonexistent/agent-manager-codex", args: [] }));
+  await expect(sessions.create(project, { projectId: project.id, agent: "codex" })).rejects.toThrow();
+  expect((await runGit(["branch", "--format=%(refname:short)"], repo)).stdout).toBe("main");
+  expect((await runGit(["worktree", "list", "--porcelain"], repo)).stdout.match(/^worktree /gm)).toHaveLength(1);
+  expect(sessions.list()).toEqual([]);
 });

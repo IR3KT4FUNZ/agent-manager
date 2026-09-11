@@ -16,6 +16,7 @@ import { SessionManager } from "./sessions";
 import { getFileDiff, listChanges, NoSuchChangeError } from "./changes";
 import { checkGithubStatus } from "./github";
 import { listOpenPrs } from "./pr";
+import { codexCatalog } from "./codex";
 
 const projects = new ProjectManager();
 const manager = new SessionManager();
@@ -24,6 +25,10 @@ const { upgradeWebSocket, websocket } = createBunWebSocket<ServerWebSocket>();
 const app = new Hono();
 
 app.get("/api/health", (c) => c.json({ ok: true }));
+
+app.get("/api/agents/codex", async (c) =>
+  c.json(await codexCatalog.get(c.req.query("refresh") === "true")),
+);
 
 app.get("/api/github/status", async (c) => c.json(await checkGithubStatus()));
 

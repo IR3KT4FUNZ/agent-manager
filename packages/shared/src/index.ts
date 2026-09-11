@@ -18,7 +18,28 @@ export interface OpenProjectRequest {
   path?: string;
 }
 
-export interface SessionInfo {
+export type AgentId = "claude" | "codex";
+
+export interface AgentSelection {
+  agent?: AgentId;
+  model?: string;
+  reasoningEffort?: string;
+}
+
+export interface CodexModel {
+  model: string;
+  displayName: string;
+  defaultReasoningEffort: string;
+  supportedReasoningEfforts: { reasoningEffort: string; description: string }[];
+}
+
+export interface CodexCatalog {
+  installed: boolean;
+  models: CodexModel[];
+  error?: string;
+}
+
+export interface SessionInfo extends AgentSelection {
   id: string;
   projectId: string;
   title: string;
@@ -31,7 +52,7 @@ export interface SessionInfo {
   pr?: PrAssociation;
 }
 
-export interface CreateSessionRequest {
+export interface CreateSessionRequest extends AgentSelection {
   projectId: string;
   command?: string;
   args?: string[];

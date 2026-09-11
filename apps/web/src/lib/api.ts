@@ -1,4 +1,5 @@
 import type {
+  CodexCatalog,
   CreateSessionRequest,
   FileDiff,
   GithubStatus,
@@ -99,4 +100,8 @@ export function getFileDiff(id: string, path: string): Promise<FileDiff> {
   return fetch(`/api/sessions/${id}/diff?path=${encodeURIComponent(path)}`).then((r) =>
     json<FileDiff>(r),
   );
+}
+
+export function getCodexCatalog(refresh = false): Promise<CodexCatalog> {
+  return fetch(`/api/agents/codex${refresh ? "?refresh=true" : ""}`).then((r) => json<CodexCatalog>(r));
 }
