@@ -11,26 +11,30 @@ export function tempDir(prefix: string): string {
   return dir;
 }
 
+export async function commitAll(dir: string, message: string): Promise<void> {
+  await runGit(["add", "-A"], dir);
+  await runGit(
+    [
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "user.name=Test",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      message,
+    ],
+    dir,
+  );
+}
+
 export async function tempRepo(options: { commit?: boolean } = {}): Promise<string> {
   const dir = tempDir("agent-manager-repo-");
   await runGit(["init", "-b", "main"], dir);
   if (options.commit !== false) {
     writeFileSync(join(dir, "README.md"), "hello\n");
-    await runGit(["add", "."], dir);
-    await runGit(
-      [
-        "-c",
-        "user.email=test@example.com",
-        "-c",
-        "user.name=Test",
-        "-c",
-        "commit.gpgsign=false",
-        "commit",
-        "-m",
-        "init",
-      ],
-      dir,
-    );
+    await commitAll(dir, "init");
   }
   return dir;
 }

@@ -54,18 +54,20 @@ async function runGitRaw(
 // The ref this worktree's changes are measured against: the point where it
 // branched from the target branch. Falls back to HEAD (uncommitted changes
 // only) when no target branch can be determined.
-async function resolveBaseRef(worktree: WorktreeInfo): Promise<string> {
+async function resolveBaseRef(worktree: WorktreeInfo, targetOverride?: string): Promise<string> {
   const cwd = worktree.path;
-  let target: string | null = null;
+  let target: string | null = targetOverride ?? null;
 
-  const originHead = await runGit(["rev-parse", "--abbrev-ref", "origin/HEAD"], cwd);
-  if (originHead.exitCode === 0 && originHead.stdout) {
-    target = originHead.stdout; // e.g. "origin/main"
-  } else {
-    for (const name of ["main", "master"]) {
-      if (await branchExists(worktree.repoRoot, name)) {
-        target = name;
-        break;
+  if (target === null) {
+    const originHead = await runGit(["rev-parse", "--abbrev-ref", "origin/HEAD"], cwd);
+    if (originHead.exitCode === 0 && originHead.stdout) {
+      target = originHead.stdout; // e.g. "origin/main"
+    } else {
+      for (const name of ["main", "master"]) {
+        if (await branchExists(worktree.repoRoot, name)) {
+          target = name;
+          break;
+        }
       }
     }
   }
@@ -82,9 +84,12 @@ interface ComputedChanges {
   files: ChangeEntry[];
 }
 
-async function computeChanges(worktree: WorktreeInfo): Promise<ComputedChanges> {
+async function computeChanges(
+  worktree: WorktreeInfo,
+  targetOverride?: string,
+): Promise<ComputedChanges> {
   const cwd = worktree.path;
-  const baseRef = await resolveBaseRef(worktree);
+  const baseRef = await resolveBaseRef(worktree, targetOverride);
   const byPath = new Map<string, ChangeEntry>();
 
   // Committed + unstaged changes vs the base.
@@ -120,9 +125,12 @@ async function computeChanges(worktree: WorktreeInfo): Promise<ComputedChanges> 
   return { baseRef, files };
 }
 
-export async function listChanges(worktree: WorktreeInfo): Promise<SessionChanges> {
-  const { baseRef, files } = await computeChanges(worktree);
-  return { base: shortBase(baseRef), files };
+export async function listChanges(
+  worktree: WorktreeInfo,
+  targetOverride?: string,
+): Promise<SessionChanges> {
+  const { baseRef, files } = await computeChanges(worktree, targetOverride);
+  return { base: targetOverride ?? shortBase(baseRef), files };
 }
 
 async function baseFileSize(cwd: string, baseRef: string, relPath: string): Promise<number> {
@@ -149,9 +157,13 @@ function diffArgs(baseRef: string, entry: ChangeEntry): string[] {
   return [...common, "--find-renames", baseRef, "--", ...paths];
 }
 
-export async function getFileDiff(worktree: WorktreeInfo, relPath: string): Promise<FileDiff> {
+export async function getFileDiff(
+  worktree: WorktreeInfo,
+  relPath: string,
+  targetOverride?: string,
+): Promise<FileDiff> {
   const cwd = worktree.path;
-  const { baseRef, files } = await computeChanges(worktree);
+  const { baseRef, files } = await computeChanges(worktree, targetOverride);
   const entry = files.find((f) => f.path === relPath);
   if (!entry) throw new NoSuchChangeError(`No pending change for '${relPath}'.`);
 
@@ -163,7 +175,7 @@ export async function getFileDiff(worktree: WorktreeInfo, relPath: string): Prom
     path: relPath,
     oldPath: entry.oldPath,
     status: entry.status,
-    base: shortBase(baseRef),
+    base: targetOverride ?? shortBase(baseRef),
     kind: "text",
     hunks: [],
     additions: 0,

@@ -1,6 +1,8 @@
 import type {
   CreateSessionRequest,
   FileDiff,
+  GithubStatus,
+  PrSummary,
   ProjectInfo,
   SessionChanges,
   SessionInfo,
@@ -32,6 +34,14 @@ export function openProject(path?: string): Promise<ProjectInfo> {
 
 export function closeProject(id: string): Promise<void> {
   return fetch(`/api/projects/${id}`, { method: "DELETE" }).then((r) => json(r));
+}
+
+export function getGithubStatus(): Promise<GithubStatus> {
+  return fetch("/api/github/status").then((r) => json<GithubStatus>(r));
+}
+
+export function listProjectPulls(projectId: string): Promise<PrSummary[]> {
+  return fetch(`/api/projects/${projectId}/pulls`).then((r) => json<PrSummary[]>(r));
 }
 
 export function listSessions(): Promise<SessionInfo[]> {

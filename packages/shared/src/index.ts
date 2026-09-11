@@ -28,6 +28,7 @@ export interface SessionInfo {
   exitCode: number | null;
   createdAt: string;
   worktree?: WorktreeInfo;
+  pr?: PrAssociation;
 }
 
 export interface CreateSessionRequest {
@@ -35,6 +36,7 @@ export interface CreateSessionRequest {
   command?: string;
   args?: string[];
   title?: string;
+  prNumber?: string | number;
 }
 
 export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "untracked";
@@ -78,6 +80,39 @@ export interface FileDiff {
   deletions: number;
   oldSize: number;
   newSize: number;
+}
+
+export interface GithubStatus {
+  installed: boolean;
+  authenticated: boolean;
+  login?: string;
+  message?: string;
+}
+
+export type PrState = "OPEN" | "CLOSED" | "MERGED";
+
+export interface PrSummary {
+  number: number;
+  title: string;
+  url: string;
+  isDraft: boolean;
+  headRefName: string;
+  author: string;
+  updatedAt: string;
+}
+
+export interface PrAssociation {
+  number: number;
+  title: string;
+  url: string;
+  state: PrState;
+  isDraft: boolean;
+  baseRepo: string;
+  baseRefName: string;
+  headRefName: string;
+  headSha: string;
+  isCrossRepository: boolean;
+  author: string;
 }
 
 export type ClientMessage =
