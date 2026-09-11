@@ -118,7 +118,7 @@ function SideCell({
         data-path={path}
         data-side={side}
         data-line={number ?? undefined}
-        className={`px-2 whitespace-pre ${selected ? "bg-sky-500/20" : tint.background} ${tint.text}`}
+        className={`min-w-0 px-2 whitespace-pre-wrap wrap-anywhere ${selected ? "bg-sky-500/20" : tint.background} ${tint.text}`}
       >
         {line?.text ?? ""}
         {line?.noNewline && <span className="text-zinc-600"> ↵ no newline at end of file</span>}
@@ -153,7 +153,7 @@ function RowNotes({ row, review }: { row: DiffRow; review: Review }) {
   if (threads.length === 0 && drafts.length === 0 && !composer) return null;
 
   return (
-    <div className="col-span-4 space-y-2 border-y border-zinc-800 bg-zinc-950/80 px-3 py-2">
+    <div className="col-span-4 min-w-0 space-y-2 border-y border-zinc-800 bg-zinc-950/80 px-3 py-2">
       {threads.map((thread) => (
         <ThreadCard key={thread.id} thread={thread} sessionId={review.sessionId} />
       ))}
@@ -175,7 +175,7 @@ function HunkRows({ path, hunk, review }: { path: string; hunk: DiffHunk; review
   const rows: DiffRow[] = buildSideBySideRows(hunk);
   return (
     <>
-      <div className="col-span-4 bg-zinc-800/60 px-2 py-0.5 text-zinc-500">
+      <div className="col-span-4 min-w-0 bg-zinc-800/60 px-2 py-0.5 whitespace-pre-wrap wrap-anywhere text-zinc-500">
         {`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`}
         {hunk.header && ` ${hunk.header}`}
       </div>
@@ -211,7 +211,7 @@ function DiffBody({ diff, review }: { diff: FileDiff; review: Review }) {
   return (
     <div className="h-full overflow-auto">
       <OutdatedThreads threads={review.threads.outdated} sessionId={review.sessionId} />
-      <div className="grid w-max min-w-full grid-cols-[auto_1fr_auto_1fr] font-mono text-xs leading-5">
+      <div className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] font-mono text-xs leading-5">
         {diff.hunks.map((hunk) => (
           <HunkRows
             key={`${hunk.oldStart}-${hunk.newStart}`}

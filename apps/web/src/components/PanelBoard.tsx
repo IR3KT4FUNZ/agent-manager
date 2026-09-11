@@ -192,7 +192,7 @@ export function PanelBoard({ panels }: { panels: PanelSpec[] }) {
                 </span>
                 {panel.headerRight && <div className="ml-auto min-w-0">{panel.headerRight}</div>}
               </header>
-              <div className="min-h-0 min-w-0 flex-1">{panel.content}</div>
+              <div className="min-h-0 min-w-0 flex-1 wrap-anywhere">{panel.content}</div>
             </section>
           );
         })}

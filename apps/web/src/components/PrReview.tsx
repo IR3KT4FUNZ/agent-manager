@@ -69,7 +69,7 @@ export function DraftCard({
     <div className="rounded-md border border-sky-500/40 bg-sky-500/5 px-2 py-1.5">
       <p className="flex items-baseline gap-2 text-[10px] text-zinc-500">
         <span className="font-medium text-sky-300">Pending</span>
-        <span className="min-w-0 flex-1 truncate">{describeAnchor(comment)}</span>
+        <span className="min-w-0 flex-1 wrap-anywhere">{describeAnchor(comment)}</span>
         <button onClick={onRemove} title="Remove this comment" className="hover:text-rose-400">
           ✕
         </button>

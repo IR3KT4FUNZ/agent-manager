@@ -39,7 +39,7 @@ export function ChangedFilesBase({ sessionId }: { sessionId: string }) {
 function FileLabel({ file }: { file: ChangeEntry }) {
   const { dir, name } = splitPath(file.path);
   return (
-    <span className="min-w-0 flex-1 truncate">
+    <span className="min-w-0 flex-1 whitespace-pre-wrap wrap-anywhere">
       {file.oldPath && <span className="text-zinc-500">{splitPath(file.oldPath).name} → </span>}
       {dir && <span className="text-zinc-500">{dir}</span>}
       <span>{name}</span>
