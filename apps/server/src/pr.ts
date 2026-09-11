@@ -167,7 +167,7 @@ async function remoteHeadShaOf(repoRoot: string, number: number): Promise<string
   return headRefOid ?? null;
 }
 
-async function pathsChangedSince(worktree: WorktreeInfo, headSha: string): Promise<string[]> {
+export async function pathsChangedSince(worktree: WorktreeInfo, headSha: string): Promise<string[]> {
   const changed = await runGit(
     ["-c", "core.quotepath=false", "diff", "--name-only", "-z", headSha],
     worktree.path,
@@ -178,7 +178,7 @@ async function pathsChangedSince(worktree: WorktreeInfo, headSha: string): Promi
   );
   const paths = new Set<string>();
   for (const result of [changed, untracked]) {
-    if (result.exitCode !== 0) continue;
+    if (result.exitCode !== 0) throw new Error("Could not check local PR review anchors.");
     for (const path of result.stdout.split("\0")) if (path) paths.add(path);
   }
   return [...paths].sort();

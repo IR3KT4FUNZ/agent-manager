@@ -1,4 +1,6 @@
 import type {
+  AskAgentRequest,
+  AskAgentResult,
   SourceDocument,
   NavigationRequest,
   NavigationResult,
@@ -133,4 +135,10 @@ export function navigateCode(
     headers: { "content-type": "application/json" },
     body: JSON.stringify(request),
   }).then((r) => json<NavigationResult>(r));
+}
+
+export function askAgent(id: string, request: AskAgentRequest): Promise<AskAgentResult> {
+  return fetch(`/api/sessions/${id}/questions`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request),
+  }).then((r) => json<AskAgentResult>(r));
 }

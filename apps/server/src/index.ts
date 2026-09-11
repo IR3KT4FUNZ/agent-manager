@@ -1,3 +1,5 @@
+import { bodyLimit } from "hono/body-limit";
+import { MAX_QUESTION_BYTES, QuestionError } from "./questions";
 import { readSource, SourceError } from "./source";
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -16,7 +18,7 @@ import { ProjectManager } from "./projects";
 import { SessionManager } from "./sessions";
 import { getFileDiff, listChanges, NoSuchChangeError } from "./changes";
 import { checkGithubStatus } from "./github";
-import { listOpenPrs } from "./pr";
+import { listOpenPrs, pathsChangedSince } from "./pr";
 import { codexCatalog } from "./codex";
 
 const projects = new ProjectManager();
@@ -158,7 +160,19 @@ app.get("/api/sessions/:id/diff", async (c) => {
   const path = c.req.query("path");
   if (!path) return c.json({ error: "missing path" }, 400);
   try {
-    return c.json(await getFileDiff(session.worktree, path, session.diffBase()));
+    const diff = await getFileDiff(session.worktree, path, session.diffBase());
+    const reviewPr = session.reviewAssociation();
+    if (reviewPr) {
+      diff.reviewHeadSha = reviewPr.headSha;
+      try {
+        const changed = await pathsChangedSince(session.worktree, reviewPr.headSha);
+        const currentVersion = await readSource(session.cwd, path).then(source => source.version, () => undefined);
+        diff.reviewAnchorsValid = !changed.includes(path) && diff.currentVersion === currentVersion;
+      } catch {
+        diff.reviewAnchorsValid = false;
+      }
+    }
+    return c.json(diff);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return c.json({ error: message }, error instanceof NoSuchChangeError ? 404 : 400);
@@ -188,6 +202,16 @@ app.post("/api/sessions/:id/navigation", async (c) => {
       { error: error instanceof Error ? error.message : String(error) },
       error instanceof SourceError ? error.status : 400,
     );
+  }
+});
+
+app.post("/api/sessions/:id/questions", bodyLimit({ maxSize: MAX_QUESTION_BYTES, onError: (c) => c.json({ error: "Question and selected code exceed 64 KiB." }, 413) }), async (c) => {
+  const session = manager.get(c.req.param("id"));
+  if (!session) return c.json({ error: "session not found" }, 404);
+  try {
+    return c.json(await session.questions.submit(await c.req.json()));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, error instanceof QuestionError ? error.status : 400);
   }
 });
 

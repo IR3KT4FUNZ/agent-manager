@@ -10,54 +10,6 @@ const VERDICTS: { event: PrReviewEvent; label: string }[] = [
   { event: "REQUEST_CHANGES", label: "Request changes" },
 ];
 
-export function CommentComposer({
-  lines,
-  onSave,
-  onCancel,
-}: {
-  lines: string;
-  onSave: (body: string) => void;
-  onCancel: () => void;
-}) {
-  const [body, setBody] = useState("");
-
-  return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (body.trim()) onSave(body.trim());
-      }}
-      className="space-y-1.5 rounded-md border border-sky-500/40 bg-zinc-900 p-2"
-    >
-      <p className="text-[10px] text-zinc-500">Comment on {lines}</p>
-      <textarea
-        autoFocus
-        rows={3}
-        value={body}
-        onChange={(event) => setBody(event.target.value)}
-        placeholder="Leave a comment"
-        className="w-full resize-y rounded border border-zinc-700 bg-zinc-950 px-2 py-1 font-sans text-xs text-zinc-100 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
-      />
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={!body.trim()}
-          className="rounded bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-900 hover:bg-white disabled:opacity-50"
-        >
-          Add to review
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
-
 export function DraftCard({
   comment,
   onRemove,

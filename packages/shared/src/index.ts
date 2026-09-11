@@ -91,6 +91,8 @@ export interface DiffHunk {
 }
 
 export interface FileDiff {
+  reviewHeadSha?: string;
+  reviewAnchorsValid?: boolean;
   currentVersion?: string;
   path: string;
   oldPath?: string;
@@ -234,4 +236,27 @@ export interface SourceLocation {
 export interface NavigationResult {
   locations: SourceLocation[];
   message?: string;
+}
+
+export interface DiffSelectionContext {
+  path: string;
+  side: "old" | "new";
+  startLine: number;
+  endLine: number;
+  lines: { line: number; text: string }[];
+  base: string;
+  currentVersion?: string;
+  selectedAt: string;
+  reviewHeadSha?: string;
+}
+
+export interface AskAgentRequest {
+  requestId: string;
+  question: string;
+  context: DiffSelectionContext;
+}
+
+export interface AskAgentResult {
+  requestId: string;
+  status: "submitted";
 }

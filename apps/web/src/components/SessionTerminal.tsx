@@ -9,7 +9,9 @@ const wsBase = import.meta.env.DEV
   ? "ws://localhost:3001"
   : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
 
-function TerminalPane({ url, autoFocus = true }: { url: string; autoFocus?: boolean }) {
+function TerminalPane({ url, autoFocus = true, focusKey = 0 }: { url: string; autoFocus?: boolean; focusKey?: number }) {
+  const terminalRef = useRef<Terminal | null>(null);
+  const focusPending = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -22,6 +24,7 @@ function TerminalPane({ url, autoFocus = true }: { url: string; autoFocus?: bool
       fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
       theme: { background: "#09090b", foreground: "#e4e4e7" },
     });
+    terminalRef.current = term;
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
@@ -51,6 +54,10 @@ function TerminalPane({ url, autoFocus = true }: { url: string; autoFocus?: bool
         if (container.clientWidth === 0 || container.clientHeight === 0) return;
         fit.fit();
         send({ type: "resize", cols: term.cols, rows: term.rows });
+        if (focusPending.current) {
+          term.focus();
+          focusPending.current = false;
+        }
       });
     });
     resizeObserver.observe(container);
@@ -63,9 +70,24 @@ function TerminalPane({ url, autoFocus = true }: { url: string; autoFocus?: bool
       cancelAnimationFrame(resizeFrame);
       input.dispose();
       ws.close();
+      terminalRef.current = null;
       term.dispose();
     };
   }, [url, autoFocus]);
+
+  useEffect(() => {
+    if (!focusKey) return;
+    focusPending.current = true;
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        const container = containerRef.current;
+        if (!container || !container.clientWidth || !container.clientHeight) return;
+        terminalRef.current?.focus();
+        focusPending.current = false;
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusKey]);
 
   return (
     <div className="h-full w-full bg-[#09090b] p-2">
@@ -74,8 +96,8 @@ function TerminalPane({ url, autoFocus = true }: { url: string; autoFocus?: bool
   );
 }
 
-export function SessionTerminal({ sessionId }: { sessionId: string }) {
-  return <TerminalPane url={wsUrl(wsBase, sessionWsPath(sessionId))} />;
+export function SessionTerminal({ sessionId, focusKey }: { sessionId: string; focusKey?: number }) {
+  return <TerminalPane focusKey={focusKey} url={wsUrl(wsBase, sessionWsPath(sessionId))} />;
 }
 
 export function SessionShellTerminal({ sessionId }: { sessionId: string }) {
