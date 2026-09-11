@@ -57,6 +57,12 @@ function button(label: string) {
   return [...container.querySelectorAll("button")].find(item => item.getAttribute("aria-label") === label || item.textContent === label)!;
 }
 
+async function pointer(target: EventTarget, type: string) {
+  await act(() => target.dispatchEvent(
+    new browser.PointerEvent(type, { bubbles: true, button: 0 }) as unknown as PointerEvent,
+  ));
+}
+
 test("accessible gutter selection opens a fixed snapshot and restores the unsent draft after remount", async () => {
   await render();
   const gutter = button("Ask about or comment on old line 2");
@@ -123,4 +129,58 @@ test("range dragging stays on one side and captures the diff displayed at pointe
   const draft = diffComposers.get(sessionId, diff.path)!;
   expect(draft.context).toMatchObject({ side: "new", startLine: 1, endLine: 2, currentVersion: diff.currentVersion });
   expect(draft.context.lines).toEqual([{ line: 1, text: "wrapped ".repeat(100) }, { line: 2, text: "new" }]);
+});
+
+test("pointer cancellation keeps the existing draft and allows another selection", async () => {
+  await render();
+  await act(() => button("Ask about or comment on old line 2").click());
+  const original = diffComposers.get(sessionId, diff.path)!;
+  await act(() => diffComposers.update(original.id, { text: "Keep this question" }));
+
+  await pointer(button("Ask about or comment on new line 2"), "pointerdown");
+  await pointer(window, "pointercancel");
+  await pointer(window, "pointerup");
+  expect(diffComposers.get(sessionId, diff.path)).toMatchObject({
+    id: original.id,
+    text: "Keep this question",
+  });
+
+  await pointer(button("Ask about or comment on new line 1"), "pointerdown");
+  await pointer(window, "pointerup");
+  expect(diffComposers.get(sessionId, diff.path)?.anchor).toEqual({ side: "RIGHT", line: 1 });
+});
+
+test("unmounting during a drag removes the pending pointer handlers", async () => {
+  await render();
+  await pointer(button("Ask about or comment on new line 2"), "pointerdown");
+  await act(() => root.render(null));
+  await pointer(window, "pointerup");
+  expect(diffComposers.get(sessionId, diff.path)).toBeUndefined();
+});
+
+test("a composer stays visible when only its side's anchor disappears and returns inline once restored", async () => {
+  await render();
+  await act(() => button("Ask about or comment on old line 2").click());
+  const draft = diffComposers.get(sessionId, diff.path)!;
+  await act(() => diffComposers.update(draft.id, { text: "Explain this deletion" }));
+
+  await act(() => client.setQueryData(["diff", sessionId, diff.path], {
+    ...diff,
+    hunks: diff.hunks.map((hunk) => ({
+      ...hunk,
+      lines: hunk.lines.filter((line) => line.kind !== "del"),
+    })),
+  }));
+  await act(() => new Promise(resolve => setTimeout(resolve, 10)));
+  expect(button("Ask about or comment on new line 2")).toBeDefined();
+  expect(container.querySelector('[data-current-version] form')).toBeNull();
+  expect(container.querySelectorAll("form")).toHaveLength(1);
+  expect(container.querySelector("textarea")?.value).toBe("Explain this deletion");
+  expect(container.querySelector("pre")?.textContent).toBe("2: old");
+
+  await act(() => client.setQueryData(["diff", sessionId, diff.path], diff));
+  await act(() => new Promise(resolve => setTimeout(resolve, 10)));
+  expect(container.querySelector('[data-current-version] form')).not.toBeNull();
+  expect(container.querySelectorAll("form")).toHaveLength(1);
+  expect(container.querySelector("textarea")?.value).toBe("Explain this deletion");
 });

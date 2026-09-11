@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { DiffHunk, DiffLine, FileDiff, PrSide } from "@agent-manager/shared";
 import { buildSideBySideRows, type DiffRow } from "../lib/diffRows";
@@ -16,7 +16,18 @@ import {
 } from "./PrThreads";
 
 import { DiffComposer } from "./DiffComposer";
-import { diffComposers, useDiffComposer, useChatFocusRequest } from "../lib/diffComposer";
+import {
+  diffComposers,
+  useDiffComposer,
+  useChatFocusRequest,
+  type SelectionAnchor,
+} from "../lib/diffComposer";
+import {
+  agentQuestionDisabledReason,
+  githubCommentDisabledReason,
+  isDiffAnchorVisible,
+} from "../lib/diffComposerRules";
+import { useDiffSelection, type DiffDrag } from "../lib/useDiffSelection";
 
 const SIDE_TINT = {
   add: { background: "bg-emerald-500/10", text: "text-emerald-200" },
@@ -25,21 +36,15 @@ const SIDE_TINT = {
   empty: { background: "bg-zinc-950/60", text: "" },
 } as const;
 
-interface Anchor {
-  side: PrSide;
-  line: number;
-  startLine?: number;
-}
-
 interface Review {
   sessionId: string;
   threads: FileThreads;
   drafts: Map<string, DraftComment[]>;
-  composer: Anchor | null;
-  drag: { side: PrSide; from: number; to: number } | null;
-  start: (anchor: Anchor) => void;
-  extend: (anchor: Anchor) => void;
-  open: (anchor: Anchor) => void;
+  composer: SelectionAnchor | null;
+  drag: DiffDrag | null;
+  start: (anchor: SelectionAnchor) => void;
+  extend: (anchor: SelectionAnchor) => void;
+  open: (anchor: SelectionAnchor) => void;
   composerContent: ReactNode;
   remove: (id: string) => void;
 }
@@ -100,7 +105,9 @@ function SideCell({
               review.start({ side: prSide, line: number });
             }}
             onPointerEnter={() => review.extend({ side: prSide, line: number })}
-            onClick={event => { if (event.detail === 0) review.open({ side: prSide, line: number }); }}
+            onClick={(event) => {
+              if (event.detail === 0) review.open({ side: prSide, line: number });
+            }}
             aria-label={`Ask about or comment on ${side} line ${number}`}
             title="Ask about or comment on this line — drag for a range"
             className="group flex h-full w-full items-start justify-end px-2 text-right hover:text-sky-300 focus-visible:text-sky-300"
@@ -125,8 +132,8 @@ function SideCell({
   );
 }
 
-function rowAnchors(row: DiffRow): Anchor[] {
-  const anchors: Anchor[] = [];
+function rowAnchors(row: DiffRow): SelectionAnchor[] {
+  const anchors: SelectionAnchor[] = [];
   if (row.old?.oldLine != null) anchors.push({ side: "LEFT", line: row.old.oldLine });
   if (row.new?.newLine != null) anchors.push({ side: "RIGHT", line: row.new.newLine });
   return anchors;
@@ -289,45 +296,37 @@ export function DiffViewer({
   const { data: status } = useSessionPr(sessionId);
 
   const pr = status?.pr ?? null;
-  const editedSinceHead = data?.reviewAnchorsValid !== undefined ? !data.reviewAnchorsValid : (status?.modifiedSinceHead.includes(path) ?? false);
+  const editedSinceHead = data?.reviewAnchorsValid === undefined
+    ? (status?.modifiedSinceHead.includes(path) ?? false)
+    : !data.reviewAnchorsValid;
   const { draft, dispatch } = usePrReviewDraft(
     pr ? draftStorageKey(pr.baseRepo, pr.number) : null,
   );
 
-  const [drag, setDrag] = useState<{ side: PrSide; from: number; to: number } | null>(null);
+  const { drag, startSelection, extendSelection, openSelection } = useDiffSelection(sessionId, path, data);
   const composerDraft = useDiffComposer(sessionId, path);
   const delivered = useChatFocusRequest(sessionId);
   const composer = composerDraft?.anchor ?? null;
-  const dragDiff = useRef<FileDiff | null>(null);
   const { data: sessions } = useQuery({ queryKey: ["sessions"], queryFn: listSessions });
-  const session = sessions?.find(item => item.id === sessionId);
-  const agentDisabled = !session ? "Loading agent session…" : !session.agent
-    ? "Questions require a Claude or Codex session."
-    : session.status !== "running" ? "This agent has exited. Open a new session to ask a question." : undefined;
-  const githubDisabled = !pr ? "Open a PR session to draft GitHub comments."
-    : data?.reviewAnchorsValid === undefined ? "Checking PR review anchors…"
-    : editedSinceHead ? "Local changes no longer match the PR review anchors."
-    : composerDraft && (composerDraft.context.reviewHeadSha !== data?.reviewHeadSha || composerDraft.context.currentVersion !== data?.currentVersion)
-      ? "The file changed after selection. Cancel and select its code again." : undefined;
-  const open = (anchor: Anchor, diff = data) => {
-    if (diff) diffComposers.open(sessionId, diff, anchor);
-  };
+  const session = sessions?.find((item) => item.id === sessionId);
+  const agentDisabled = agentQuestionDisabledReason(session);
+  const githubDisabled = githubCommentDisabledReason({
+    hasPr: Boolean(pr),
+    diff: data,
+    context: composerDraft?.context,
+  });
+  const showDetachedComposer = composerDraft && (
+    error || isLoading || !isDiffAnchorVisible(data, composerDraft.anchor)
+  );
 
-  useEffect(() => {
-    if (!drag) return;
-    const finish = () => {
-      open({
-        side: drag.side,
-        line: Math.max(drag.from, drag.to),
-        startLine: drag.from === drag.to ? undefined : Math.min(drag.from, drag.to),
-      }, dragDiff.current ?? undefined);
-      setDrag(null);
-    };
-    window.addEventListener("pointerup", finish);
-    const cancel = () => setDrag(null);
-    window.addEventListener("pointercancel", cancel);
-    return () => { window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); };
-  }, [drag, sessionId, path]);
+  function addReviewComment(body: string) {
+    if (githubDisabled || !composerDraft) return;
+    dispatch({
+      type: "add",
+      comment: { ...composerDraft.anchor, path: composerDraft.path, body },
+    });
+    diffComposers.cancel(composerDraft.id);
+  }
 
   const drafts = new Map<string, DraftComment[]>();
   for (const comment of draft.comments) {
@@ -342,36 +341,38 @@ export function DiffViewer({
     drafts,
     composer,
     drag,
-    start: (anchor) => {
-      dragDiff.current = data ?? null;
-      setDrag({ side: anchor.side, from: anchor.line, to: anchor.line });
-    },
-    open,
-    extend: (anchor) =>
-      setDrag((current) =>
-        current && current.side === anchor.side ? { ...current, to: anchor.line } : current,
-      ),
-    composerContent: composerDraft && <DiffComposer draft={composerDraft} githubDisabled={githubDisabled} agentDisabled={agentDisabled}
-      onReview={body => {
-        if (githubDisabled) return;
-        dispatch({ type: "add", comment: { ...composerDraft.anchor, path: composerDraft.path, body } });
-        diffComposers.cancel(composerDraft.id);
-      }} />,
+    start: startSelection,
+    open: openSelection,
+    extend: extendSelection,
+    composerContent: composerDraft && (
+      <DiffComposer
+        draft={composerDraft}
+        githubDisabled={githubDisabled}
+        agentDisabled={agentDisabled}
+        onReview={addReviewComment}
+      />
+    ),
     remove: (id) => dispatch({ type: "remove", id }),
   };
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-zinc-900">
-      {delivered > 0 && !composerDraft && <p role="status" className="border-b border-zinc-800 px-3 py-1.5 text-xs text-sky-300">Question submitted to the agent terminal. Follow its response in Chat.</p>}
+      {delivered > 0 && !composerDraft && (
+        <p role="status" className="border-b border-zinc-800 px-3 py-1.5 text-xs text-sky-300">
+          Question submitted to the agent terminal. Follow its response in Chat.
+        </p>
+      )}
       {pr && editedSinceHead && (
         <p className="shrink-0 border-b border-zinc-800 px-3 py-1.5 text-[10px] text-amber-300">
           This file has changed since the PR head, so GitHub comments are unavailable — its lines no longer match
           what GitHub would anchor to.
         </p>
       )}
-      {composerDraft && (error || isLoading || !data?.hunks.some(hunk => hunk.lines.some(line =>
-        (composerDraft.anchor.side === "LEFT" ? line.oldLine : line.newLine) === composerDraft.anchor.line))) &&
-        <div className="max-h-[70%] overflow-auto border-b border-zinc-800 p-3">{review.composerContent}</div>}
+      {showDetachedComposer && (
+        <div className="max-h-[70%] overflow-auto border-b border-zinc-800 p-3">
+          {review.composerContent}
+        </div>
+      )}
       <div className="min-h-0 flex-1">
         {isLoading ? (
           <Message>Loading…</Message>
