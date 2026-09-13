@@ -159,7 +159,7 @@ export function PanelBoard({ panels }: { panels: PanelSpec[] }) {
               style={{
                 display: isHidden ? "none" : undefined,
                 order: position(panel.id),
-                flex: isFlexible ? "1 1 auto" : `0 1 ${widthOf(panel)}px`,
+                flex: isFlexible ? "1 1 0px" : `0 1 ${widthOf(panel)}px`,
                 minWidth: MIN_PANEL_WIDTH,
               }}
               className={`relative flex flex-col ${
