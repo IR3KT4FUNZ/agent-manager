@@ -93,6 +93,11 @@ export class DiffComposerStore {
     return this.focus.get(sessionId) ?? 0;
   }
 
+  revealReview(sessionId: string) {
+    this.focus.set(sessionId, this.focusKey(sessionId) + 1);
+    this.emit();
+  }
+
   open(sessionId: string, diff: FileDiff, anchor: SelectionAnchor) {
     const id = JSON.stringify([sessionId, diff.path, anchor.side, anchor.startLine ?? anchor.line, anchor.line]);
     if (!this.drafts.has(id)) {

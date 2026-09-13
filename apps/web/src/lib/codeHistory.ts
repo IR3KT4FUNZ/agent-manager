@@ -10,6 +10,8 @@ export interface CodeView {
   endColumn?: number;
   version?: string;
   side?: "old" | "new";
+  baseVersion?: string;
+  walkthrough?: { version: string; nodeId: string; side: "old" | "new" };
   scrollTop?: number;
   scrollLeft?: number;
 }

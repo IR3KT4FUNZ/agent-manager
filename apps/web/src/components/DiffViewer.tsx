@@ -43,6 +43,7 @@ interface Review {
   drafts: Map<string, DraftComment[]>;
   composer: SelectionAnchor | null;
   drag: DiffDrag | null;
+  highlight?: { side: "old" | "new"; line: number; endLine: number };
   start: (anchor: SelectionAnchor) => void;
   extend: (anchor: SelectionAnchor) => void;
   open: (anchor: SelectionAnchor) => void;
@@ -89,7 +90,9 @@ function SideCell({
   const number = side === "old" ? (line?.oldLine ?? null) : (line?.newLine ?? null);
   const tint = line ? SIDE_TINT[line.kind] : SIDE_TINT.empty;
   const prSide: PrSide = side === "old" ? "LEFT" : "RIGHT";
-  const selected = number !== null && inDrag(review, prSide, number);
+  const highlighted = number !== null && review.highlight?.side === side &&
+    number >= review.highlight.line && number <= review.highlight.endLine;
+  const selected = number !== null && (inDrag(review, prSide, number) || highlighted);
 
   return (
     <>
@@ -121,6 +124,7 @@ function SideCell({
         )}
       </div>
       <div
+        data-walkthrough-highlight={highlighted || undefined}
         data-path={path}
         data-side={side}
         data-line={number ?? undefined}
@@ -202,11 +206,22 @@ function DiffBody({
   onSave?: (view: Partial<CodeView>) => void;
 }) {
   const scroll = useRef<HTMLDivElement>(null);
+  const highlightValid = view?.walkthrough && view.baseVersion === diff.baseVersion && view.version === diff.currentVersion;
+  const displayedReview: Review = {
+    ...review,
+    highlight: highlightValid && view.side && view.line && view.endLine
+      ? { side: view.side, line: view.line, endLine: view.endLine } : undefined,
+  };
+  useEffect(() => {
+    if (!highlightValid || !view?.line || !view.side) return;
+    scroll.current?.querySelector(`[data-side="${view.side}"][data-line="${view.line}"]`)
+      ?.scrollIntoView?.({ block: "center" });
+  }, [highlightValid, view?.line, view?.side]);
   useEffect(() => {
     if (scroll.current) {
       scroll.current.scrollTop = view?.scrollTop ?? 0;
       scroll.current.scrollLeft = view?.scrollLeft ?? 0;
-      if (view?.side && view.line && view.endLine) {
+      if (!view?.walkthrough && view?.side && view.line && view.endLine) {
         const start = scroll.current.querySelector(
           `[data-side="${view.side}"][data-line="${view.line}"] [data-code-text]`,
         )?.firstChild;
@@ -273,7 +288,7 @@ function DiffBody({
             key={`${hunk.oldStart}-${hunk.newStart}`}
             path={diff.path}
             hunk={hunk}
-            review={review}
+            review={displayedReview}
           />
         ))}
       </div>

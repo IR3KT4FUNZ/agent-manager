@@ -32,7 +32,7 @@ This is a TypeScript monorepo managed with **Bun workspaces** (no Turborepo/Nx).
 
 ### Frontend
 
-- **React 19 + Vite + TypeScript** — web frontend, served by the Bun backend as a static bundle (no desktop shell for now; a Tauri wrapper is a possible later addition).
+- **React 19 + Vite + TypeScript** — web frontend, served by the Bun backend as a static bundle and used by the Tauri desktop shell.
 - **TanStack Query** — server state, combined with WebSocket subscriptions for live data.
 - **TanStack Router** — typed routing.
 - **Tailwind v4 + shadcn/ui** — styling and UI primitives.
@@ -81,5 +81,8 @@ This is a TypeScript monorepo managed with **Bun workspaces** (no Turborepo/Nx).
 - **Review provider integration** uses Codex `exec` and Claude print mode with JSON schemas; prompts travel through stdin. Tests inject CLI stubs or provider dependencies. Supported CLIs must implement the structured-output and permission flags used in `review/provider.ts`. Tour and review job state currently live for the server-session lifetime.
 
 - **Walkthrough dependency analysis** runs the bundled TypeScript 5.9.3 compiler in a disposable worker over captured base/current source maps. Graph edges point from prerequisites to consumers and retain evidence locations; cycles are grouped before ordering. `walkthrough/snapshot.ts` reuses `resolveBaseRef` and checks captured versions. The virtual config host uses TypeScript 5.9.3’s exported `matchFiles` helper so include/exclude patterns also apply to deleted base files.
+
+- **Walkthroughs share the review queue.** Generation captures both git revisions, analyzes them in a worker, then validates agent-supplied node clusters and derives their order from confirmed edges. Snapshot/source limits and omitted files stay visible. Tour state lasts for the server session; explicit progress uses `agent-manager.walkthrough-progress.<version>`. Regeneration gets a new version, while earlier conversation jobs retain their original step context.
+- **Walkthrough code references are version checked.** Historical source is served only from the captured snapshot through `/walkthrough/source/:nodeId`; its Monaco view disables current-worktree navigation. Current diff highlights require both source and base hashes. Edits invalidate affected steps and their dependents; edit requests recheck context when dequeued. Session disposal waits for review processes/workers to stop before removing the worktree.
 
 - **Keep credentials out of Git.** Environment files, private keys, and local CLI authentication files are ignored. Environment example/template files may be committed only with placeholders. GitHub secret scanning and push protection supplement these ignore rules; they do not replace checking files before committing.
