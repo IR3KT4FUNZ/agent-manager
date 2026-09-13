@@ -11,3 +11,21 @@ apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 # generated from apps/desktop/app-icon.png by scripts/setup.sh
 apps/desktop/src-tauri/icons/
+
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.template
+!.env.*.template
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+id_ecdsa
+.aws/
+.ssh/
+.codex/auth.json
+.claude/.credentials.json
