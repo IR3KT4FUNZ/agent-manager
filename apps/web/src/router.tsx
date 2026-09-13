@@ -2,11 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
 import { APP_NAME } from "@agent-manager/shared";
 import { listSessions } from "./lib/api";
+import { ReviewConversation } from "./components/ReviewConversation";
 import { Sidebar } from "./components/Sidebar";
 import { SessionShellTerminal, SessionTerminal } from "./components/SessionTerminal";
 import { ChangedFiles, ChangedFilesBase } from "./components/ChangedFiles";
 import { CodePanelHeader, CodeViewer } from "./components/CodeViewer";
-import { useChatFocusRequest } from "./lib/diffComposer";
+import { useReviewFocusRequest } from "./lib/diffComposer";
 import { useCodeHistory } from "./lib/codeHistory";
 import { PrBadge, PrDesyncBanner } from "./components/PrStatus";
 import { PanelBoard, type PanelSpec } from "./components/PanelBoard";
@@ -63,7 +64,7 @@ const sessionRoute = createRoute({
 
 function SessionPage() {
   const { sessionId } = sessionRoute.useParams();
-  const chatFocus = useChatFocusRequest(sessionId);
+  const reviewFocus = useReviewFocusRequest(sessionId);
   const { current, history } = useCodeHistory(sessionId);
   const diffPath = current?.path ?? null;
   const setDiffPath = (path: string) => history.visit({ mode: "diff", path });
@@ -121,13 +122,19 @@ function SessionPage() {
             </div>
           ),
         },
+        {
+          id: "walkthrough",
+          title: "Walkthrough",
+          defaultWidth: 360,
+          revealKey: reviewFocus > 0 ? `${sessionId}:${reviewFocus}` : undefined,
+          content: <div className="h-full overflow-auto"><ReviewConversation key={sessionId} sessionId={sessionId} /></div>,
+        },
         ...diffPanel,
         {
           id: "chat",
           title: "Chat",
           defaultWidth: 640,
-          revealKey: chatFocus > 0 ? `${sessionId}:${chatFocus}` : undefined,
-          content: <SessionTerminal key={sessionId} sessionId={sessionId} focusKey={chatFocus} />,
+          content: <SessionTerminal key={sessionId} sessionId={sessionId} />,
         },
       ]}
     />

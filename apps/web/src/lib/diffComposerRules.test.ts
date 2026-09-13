@@ -1,14 +1,13 @@
 import { expect, test } from "bun:test";
 import { agentQuestionDisabledReason, githubCommentDisabledReason } from "./diffComposerRules";
 
-test("agent questions require a loaded, supported, running session in that order", () => {
+test("review questions require a chosen agent and remain available after the coding agent exits", () => {
   expect(agentQuestionDisabledReason()).toBe("Loading agent session…");
   expect(agentQuestionDisabledReason({ status: "exited" })).toBe(
-    "Questions require a Claude or Codex session.",
+    "Choose a review agent in the Walkthrough panel first.",
   );
-  expect(agentQuestionDisabledReason({ agent: "claude", status: "exited" })).toBe(
-    "This agent has exited. Open a new session to ask a question.",
-  );
+  expect(agentQuestionDisabledReason({ agent: "claude", status: "exited" })).toBeUndefined();
+  expect(agentQuestionDisabledReason({ status: "exited" }, { agent: "codex" })).toBeUndefined();
   for (const agent of ["claude", "codex"] as const) {
     expect(agentQuestionDisabledReason({ agent, status: "running" })).toBeUndefined();
   }

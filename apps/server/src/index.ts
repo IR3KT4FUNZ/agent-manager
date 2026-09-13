@@ -1,5 +1,4 @@
-import { bodyLimit } from "hono/body-limit";
-import { MAX_QUESTION_BYTES, QuestionError } from "./questions";
+import { reviewRoutes } from "./review/routes";
 import { readSource, SourceError } from "./source";
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -205,15 +204,7 @@ app.post("/api/sessions/:id/navigation", async (c) => {
   }
 });
 
-app.post("/api/sessions/:id/questions", bodyLimit({ maxSize: MAX_QUESTION_BYTES, onError: (c) => c.json({ error: "Question and selected code exceed 64 KiB." }, 413) }), async (c) => {
-  const session = manager.get(c.req.param("id"));
-  if (!session) return c.json({ error: "session not found" }, 404);
-  try {
-    return c.json(await session.questions.submit(await c.req.json()));
-  } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : String(error) }, error instanceof QuestionError ? error.status : 400);
-  }
-});
+app.route("/api/sessions", reviewRoutes(manager));
 
 interface Attachable {
   attach(subscriber: (message: ServerMessage) => void): () => void;

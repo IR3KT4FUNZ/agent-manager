@@ -1,12 +1,13 @@
 import { useSyncExternalStore } from "react";
 import type {
-  AskAgentRequest,
+  ReviewRequest,
+  ReviewMode,
   AskAgentResult,
   DiffSelectionContext,
   FileDiff,
   PrSide,
 } from "@agent-manager/shared";
-import { askAgent } from "./api";
+import { sendReviewMessage } from "./review";
 
 export interface SelectionAnchor {
   side: PrSide;
@@ -24,6 +25,7 @@ export interface ComposerDraft {
   text: string;
   requestId: string;
   pending: boolean;
+  mode?: ReviewMode;
   error?: string;
 }
 
@@ -110,10 +112,10 @@ export class DiffComposerStore {
     this.emit();
   }
 
-  update(id: string, patch: Partial<Pick<ComposerDraft, "text" | "destination">>) {
+  update(id: string, patch: Partial<Pick<ComposerDraft, "text" | "destination" | "mode">>) {
     const draft = this.drafts.get(id);
     if (!draft || draft.pending) return;
-    const textChanged = patch.text !== undefined && patch.text !== draft.text;
+    const textChanged = (patch.text !== undefined && patch.text !== draft.text) || (patch.mode !== undefined && patch.mode !== draft.mode);
     this.drafts.set(id, {
       ...draft,
       ...patch,
@@ -138,7 +140,7 @@ export class DiffComposerStore {
 
   async send(
     id: string,
-    deliver: (sessionId: string, request: AskAgentRequest) => Promise<AskAgentResult> = askAgent,
+    deliver: (sessionId: string, request: ReviewRequest) => Promise<AskAgentResult> = sendReviewMessage,
   ) {
     const draft = this.drafts.get(id);
     if (!draft || draft.pending || draft.destination !== "agent" || !draft.text.trim()) return;
@@ -149,6 +151,7 @@ export class DiffComposerStore {
         requestId: draft.requestId,
         question: draft.text,
         context: draft.context,
+        mode: draft.mode ?? "ask",
       });
       this.focus.set(draft.sessionId, this.focusKey(draft.sessionId) + 1);
       this.remove(draft);
@@ -169,6 +172,6 @@ export function useDiffComposer(sessionId: string, path: string) {
   return useSyncExternalStore(diffComposers.subscribe, () => diffComposers.get(sessionId, path));
 }
 
-export function useChatFocusRequest(sessionId: string) {
+export function useReviewFocusRequest(sessionId: string) {
   return useSyncExternalStore(diffComposers.subscribe, () => diffComposers.focusKey(sessionId));
 }

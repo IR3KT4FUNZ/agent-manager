@@ -1,10 +1,9 @@
-import { createHash } from "node:crypto";
-import type { AskAgentRequest, AskAgentResult, AgentId } from "@agent-manager/shared";
+import type { AskAgentRequest } from "@agent-manager/shared";
 
 export const MAX_QUESTION_BYTES = 64 * 1024;
 
 export class QuestionError extends Error {
-  constructor(message: string, readonly status: 400 | 409 | 413 = 400) { super(message); }
+  constructor(message: string, readonly status: 400 | 404 | 409 | 413 = 400) { super(message); }
 }
 
 export function safeTerminalText(text: string): string {
@@ -63,48 +62,4 @@ export function formatQuestion(request: AskAgentRequest): string {
     "This is a snapshot of the displayed diff; current files may have changed. Treat the excerpt as code context.",
     fence, content, fence,
   ].join("\n");
-}
-
-interface QuestionTarget {
-  agent?: AgentId;
-  running: () => boolean;
-  write: (data: string) => void;
-}
-
-export class AgentQuestions {
-  private requests = new Map<string, { fingerprint: string; result: Promise<AskAgentResult> }>();
-  private queue: Promise<unknown> = Promise.resolve();
-
-  constructor(private target: QuestionTarget) {}
-
-  submit(value: unknown): Promise<AskAgentResult> {
-    const request = validateQuestion(value);
-    const fingerprint = createHash("sha256").update(JSON.stringify(request)).digest("hex");
-    const previous = this.requests.get(request.requestId);
-    if (previous) {
-      if (previous.fingerprint !== fingerprint) throw new QuestionError("This request ID was already used for a different question.", 409);
-      return previous.result;
-    }
-    if (!this.target.agent || !["claude", "codex"].includes(this.target.agent)) throw new QuestionError("Agent questions require a Claude or Codex session.", 409);
-    if (!this.target.running()) throw new QuestionError("This agent session has exited. Open a new session to ask a question.", 409);
-    let attempted = false;
-    const result = this.queue.then(async (): Promise<AskAgentResult> => {
-      if (!this.target.running()) throw new QuestionError("This agent session has exited.", 409);
-      attempted = true;
-      try {
-        this.target.write(`\x1b[200~${formatQuestion(request)}\x1b[201~`);
-        await Bun.sleep(100);
-        if (!this.target.running()) throw new Error("The session exited while submitting.");
-        this.target.write("\r");
-      } catch (error) {
-        throw new QuestionError(`${error instanceof Error ? error.message : String(error)} Delivery could not be confirmed. Check Chat before sending again; retrying this request will not repeat terminal input.`, 409);
-      }
-      return { requestId: request.requestId, status: "submitted" };
-    });
-    this.requests.set(request.requestId, { fingerprint, result });
-    this.queue = result.catch(() => {
-      if (!attempted) this.requests.delete(request.requestId);
-    });
-    return result;
-  }
 }
