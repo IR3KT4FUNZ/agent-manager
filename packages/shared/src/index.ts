@@ -260,3 +260,5 @@ export interface AskAgentResult {
   requestId: string;
   status: "submitted";
 }
+
+export type { CodeReference, DependencyNode, DependencyEdge, DependencyGraph } from "./walkthrough";
