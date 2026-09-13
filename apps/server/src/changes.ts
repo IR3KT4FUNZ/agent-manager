@@ -37,7 +37,7 @@ function shortBase(baseRef: string): string {
 
 // `runGit` trims its output, which would silently corrupt a diff's leading and
 // trailing blank lines; diffs are read as raw bytes instead.
-async function runGitRaw(
+export async function runGitRaw(
   args: string[],
   cwd: string,
 ): Promise<{ bytes: Uint8Array; exitCode: number }> {
@@ -55,7 +55,7 @@ async function runGitRaw(
 // The ref this worktree's changes are measured against: the point where it
 // branched from the target branch. Falls back to HEAD (uncommitted changes
 // only) when no target branch can be determined.
-async function resolveBaseRef(worktree: WorktreeInfo, targetOverride?: string): Promise<string> {
+export async function resolveBaseRef(worktree: WorktreeInfo, targetOverride?: string): Promise<string> {
   const cwd = worktree.path;
   let target: string | null = targetOverride ?? null;
 
