@@ -70,7 +70,7 @@ function SessionPage() {
   const setDiffPath = (path: string) => history.visit({ mode: "diff", path });
 
   const { data: sessions = [] } = useQuery({ queryKey: ["sessions"], queryFn: listSessions });
-  const isPrSession = sessions.some((session) => session.id === sessionId && session.pr);
+  const isReviewSession = sessions.some((session) => session.id === sessionId && (session.pr || session.branchReview));
 
 
   const diffPanel: PanelSpec[] = diffPath
@@ -113,7 +113,7 @@ function SessionPage() {
                       sessionId={sessionId}
                       selectedPath={diffPath}
                       onSelect={setDiffPath}
-                      autoSelectFirst={isPrSession}
+                      autoSelectFirst={isReviewSession}
                       className="min-h-0 flex-1"
                     />
                   }

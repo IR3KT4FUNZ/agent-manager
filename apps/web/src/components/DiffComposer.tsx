@@ -4,6 +4,7 @@ import { contextPreview, diffComposers, type ComposerDraft } from "../lib/diffCo
 interface DiffComposerProps {
   draft: ComposerDraft;
   githubDisabled?: string;
+  hasPr: boolean;
   agentDisabled?: string;
   onReview: (body: string) => void;
 }
@@ -11,6 +12,7 @@ interface DiffComposerProps {
 export function DiffComposer({
   draft,
   githubDisabled,
+  hasPr,
   agentDisabled,
   onReview,
 }: DiffComposerProps) {
@@ -38,7 +40,7 @@ export function DiffComposer({
       className="space-y-2 font-sans text-xs"
       onSubmit={submit}
     >
-      <label className="flex items-center gap-2">
+      {hasPr && <label className="flex items-center gap-2">
         Destination
         <select
           aria-label="Destination"
@@ -50,14 +52,14 @@ export function DiffComposer({
           <option value="agent">Agent question</option>
           <option value="github" disabled={Boolean(githubDisabled)}>GitHub comment</option>
         </select>
-      </label>
+      </label>}
       <p className="break-all text-zinc-400">
         Selected diff context: {draft.context.path} · {draft.context.side} side · lines {draft.context.startLine}–{draft.context.endLine}
       </p>
       <pre className="max-h-40 overflow-auto whitespace-pre-wrap wrap-anywhere rounded bg-zinc-950 p-2 font-mono text-zinc-300">
         {contextPreview(draft.context)}
       </pre>
-      {githubDisabled && (
+      {hasPr && githubDisabled && (
         <p className="text-zinc-500">GitHub comment unavailable: {githubDisabled}</p>
       )}
       {!isGithubComment && (
