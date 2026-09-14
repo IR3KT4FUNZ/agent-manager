@@ -68,7 +68,7 @@ export default function SourceEditor({
         startLineNumber: view.line,
         startColumn: view.column ?? 1,
         endLineNumber: view.endLine ?? view.line,
-        endColumn: view.endColumn ?? view.column ?? 1,
+        endColumn: view.endColumn ?? (view.walkthrough ? (source.content.split("\n")[(view.endLine ?? view.line) - 1]?.length ?? 0) + 1 : view.column ?? 1),
       });
       editor.revealLineInCenter(view.line);
     }
@@ -88,7 +88,7 @@ export default function SourceEditor({
         });
     };
     const disposables: monaco.IDisposable[] = [];
-    if (supportsNavigation(source.path)) {
+    if (supportsNavigation(source.path) && view.walkthrough?.side !== "old") {
       for (const action of ["definition", "references"] as const) {
         disposables.push(
           editor.addAction({

@@ -1,4 +1,5 @@
 import { ReviewAssistant, type ReviewDependencies } from "./review/assistant";
+import { WalkthroughService } from "./walkthrough/service";
 import { CodeNavigation } from "./navigation";
 import { spawn } from "bun-pty";
 import { randomUUID } from "node:crypto";
@@ -94,6 +95,7 @@ export class Session {
   private shell?: ShellTerminal;
   readonly navigation: CodeNavigation;
   readonly review: ReviewAssistant;
+  readonly walkthrough: WalkthroughService;
   private disposed = false;
 
   constructor(resolved: ResolvedSession, reviewDependencies: ReviewDependencies = {}) {
@@ -117,6 +119,8 @@ export class Session {
     });
 
     this.review = new ReviewAssistant(this.cwd, { agent: this.agent, model: this.model, reasoningEffort: this.reasoningEffort }, reviewDependencies);
+
+    this.walkthrough = new WalkthroughService(this.review, this.worktree, () => this.diffBase(), () => this.reviewAssociation()?.number);
 
     this.pty.onData((data: string) => {
       this.scrollback = trimScrollback(this.scrollback, data);

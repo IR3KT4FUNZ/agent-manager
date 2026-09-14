@@ -4,6 +4,7 @@ import type { NavigationRequest, NavigationResult, SourceLocation } from "@agent
 import { ApiError, getSource, navigateCode } from "../lib/api";
 import { groupLocations, supportsNavigation, useCodeHistory } from "../lib/codeHistory";
 import { diffPositionAtPoint } from "../lib/diffPosition";
+import { getWalkthroughSource } from "../lib/walkthrough";
 import { DiffPathLabel, DiffViewer } from "./DiffViewer";
 
 const SourceEditor = lazy(() => import("./SourceEditor"));
@@ -124,8 +125,10 @@ function CodeViewBody({ sessionId }: { sessionId: string }) {
     request: Omit<NavigationRequest, "action">;
   } | null>(null);
   const source = useQuery({
-    queryKey: ["source", sessionId, view?.path],
-    queryFn: () => getSource(sessionId, view!.path),
+    queryKey: view?.walkthrough ? ["walkthrough-source", sessionId, view.walkthrough.version, view.walkthrough.nodeId] : ["source", sessionId, view?.path],
+    queryFn: () => view?.walkthrough
+      ? getWalkthroughSource(sessionId, view.walkthrough.version, view.walkthrough.nodeId)
+      : getSource(sessionId, view!.path),
     enabled: view?.mode === "source",
     refetchInterval: 3_000,
     retry: false,
@@ -252,6 +255,9 @@ function CodeViewBody({ sessionId }: { sessionId: string }) {
             </button>
           )}
         </div>
+      )}
+      {view.walkthrough?.side === "old" && view.mode === "source" && (
+        <p className="px-3 py-2 text-xs text-zinc-500">Base revision source · read-only historical context</p>
       )}
       {!supportsNavigation(view.path) && (
         <p className="px-3 py-2 text-xs text-zinc-500">

@@ -173,6 +173,7 @@ export async function getFileDiff(
   const newSize = worktreeFileSize(cwd, relPath);
 
   const diff: FileDiff = {
+    baseVersion: baseRef,
     path: relPath,
     oldPath: entry.oldPath,
     status: entry.status,

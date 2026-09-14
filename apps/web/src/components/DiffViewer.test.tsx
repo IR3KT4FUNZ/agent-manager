@@ -50,8 +50,8 @@ afterAll(async () => {
     else Reflect.deleteProperty(globalThis, key);
   }
 });
-async function render() {
-  await act(() => root.render(<QueryClientProvider client={client}><DiffViewer sessionId={sessionId} path={diff.path} /></QueryClientProvider>));
+async function render(view?: import("../lib/codeHistory").CodeView) {
+  await act(() => root.render(<QueryClientProvider client={client}><DiffViewer sessionId={sessionId} path={diff.path} view={view} /></QueryClientProvider>));
 }
 function button(label: string) {
   return [...container.querySelectorAll("button")].find(item => item.getAttribute("aria-label") === label || item.textContent === label)!;
@@ -183,4 +183,18 @@ test("a composer stays visible when only its side's anchor disappears and return
   expect(container.querySelector('[data-current-version] form')).not.toBeNull();
   expect(container.querySelectorAll("form")).toHaveLength(1);
   expect(container.querySelector("textarea")?.value).toBe("Explain this deletion");
+});
+
+
+test("walkthrough highlights disappear when either the current source or git base changes", async () => {
+  client.setQueryData(["diff", sessionId, diff.path], { ...diff, baseVersion: "base-sha" });
+  await render({ mode: "diff", path: diff.path, side: "new", line: 2, endLine: 2, version: diff.currentVersion,
+    baseVersion: "base-sha", walkthrough: { version: "tour", nodeId: "node", side: "new" } });
+  expect(container.querySelectorAll('[data-walkthrough-highlight="true"]')).toHaveLength(1);
+  await act(() => client.setQueryData(["diff", sessionId, diff.path], { ...diff, baseVersion: "different-base" }));
+  await act(() => new Promise(resolve => setTimeout(resolve, 10)));
+  expect(container.querySelectorAll('[data-walkthrough-highlight="true"]')).toHaveLength(0);
+  await act(() => client.setQueryData(["diff", sessionId, diff.path], { ...diff, baseVersion: "base-sha", currentVersion: "changed" }));
+  await act(() => new Promise(resolve => setTimeout(resolve, 10)));
+  expect(container.querySelectorAll('[data-walkthrough-highlight="true"]')).toHaveLength(0);
 });

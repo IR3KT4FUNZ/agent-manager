@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
 import { APP_NAME } from "@agent-manager/shared";
 import { listSessions } from "./lib/api";
-import { ReviewConversation } from "./components/ReviewConversation";
+import { WalkthroughPanel, StartWalkthrough } from "./components/WalkthroughPanel";
 import { Sidebar } from "./components/Sidebar";
 import { SessionShellTerminal, SessionTerminal } from "./components/SessionTerminal";
 import { ChangedFiles, ChangedFilesBase } from "./components/ChangedFiles";
@@ -103,6 +103,7 @@ function SessionPage() {
           content: (
             <div className="flex h-full min-h-0 flex-col">
               <PrDesyncBanner sessionId={sessionId} />
+              <StartWalkthrough sessionId={sessionId} />
               <div className="min-h-0 flex-1">
                 <VerticalSplit
                   storageKey="agent-manager.changes-split"
@@ -127,7 +128,7 @@ function SessionPage() {
           title: "Walkthrough",
           defaultWidth: 360,
           revealKey: reviewFocus > 0 ? `${sessionId}:${reviewFocus}` : undefined,
-          content: <div className="h-full overflow-auto"><ReviewConversation key={sessionId} sessionId={sessionId} /></div>,
+          content: <WalkthroughPanel key={sessionId} sessionId={sessionId} />,
         },
         ...diffPanel,
         {

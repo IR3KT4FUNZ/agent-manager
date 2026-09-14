@@ -91,6 +91,7 @@ export interface DiffHunk {
 }
 
 export interface FileDiff {
+  baseVersion?: string;
   reviewHeadSha?: string;
   reviewAnchorsValid?: boolean;
   currentVersion?: string;
@@ -263,3 +264,4 @@ export interface AskAgentResult {
 
 export type { CodeReference, DependencyNode, DependencyEdge, DependencyGraph } from "./walkthrough";
 export type { ReviewMode, ReviewJobStatus, ReviewRequest, ReviewJob, ReviewState, ReviewStepContext } from "./review";
+export type { WalkthroughReference, WalkthroughStep, Walkthrough, WalkthroughState } from "./walkthrough";
