@@ -262,3 +262,4 @@ export interface AskAgentResult {
 }
 
 export type { CodeReference, DependencyNode, DependencyEdge, DependencyGraph } from "./walkthrough";
+export type { ReviewMode, ReviewJobStatus, ReviewRequest, ReviewJob, ReviewState, ReviewStepContext } from "./review";

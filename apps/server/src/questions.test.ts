@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AskAgentRequest } from "@agent-manager/shared";
-import { AgentQuestions, formatQuestion, MAX_QUESTION_BYTES, safeTerminalText, validateQuestion } from "./questions";
+import { formatQuestion, MAX_QUESTION_BYTES, safeTerminalText, validateQuestion } from "./questions";
 
 function request(): AskAgentRequest {
   return { requestId: "question-1", question: "Why?\nExplain this.", context: {
@@ -39,42 +39,4 @@ test("validates selection shape, nonempty text, and UTF-8 payload size", () => {
   expect(() => validateQuestion(value)).toThrow(/64 KiB/);
   value.question = "fine";
   expect(validateQuestion(value)).toEqual(value);
-});
-
-test("deduplicates pending and delivered requests and serializes paste/Enter pairs", async () => {
-  const writes: string[] = [];
-  const questions = new AgentQuestions({ agent: "codex", running: () => true, write: data => { writes.push(data); } });
-  const first = request();
-  const second = { ...request(), requestId: "question-2" };
-  await Promise.all([questions.submit(first), questions.submit(first), questions.submit(second)]);
-  expect(await questions.submit(first)).toEqual({ requestId: first.requestId, status: "submitted" });
-  expect(writes).toEqual([`\x1b[200~${formatQuestion(first)}\x1b[201~`, "\r", `\x1b[200~${formatQuestion(second)}\x1b[201~`, "\r"]);
-  expect(() => questions.submit({ ...first, question: "Different" })).toThrow(/different question/);
-});
-
-test("rejects custom and exited sessions without writing", () => {
-  for (const target of [{ agent: undefined, running: () => true }, { agent: "claude" as const, running: () => false }]) {
-    const writes: string[] = [];
-    const questions = new AgentQuestions({ ...target, write: data => { writes.push(data); } });
-    expect(() => questions.submit(request())).toThrow();
-    expect(writes).toEqual([]);
-  }
-});
-
-test("failures before delivery can recover; uncertain writes never replay", async () => {
-  let running = true;
-  const writes: string[] = [];
-  const questions = new AgentQuestions({ agent: "claude", running: () => running, write: data => { writes.push(data); } });
-  const pending = questions.submit(request());
-  running = false;
-  await expect(pending).rejects.toThrow(/exited/);
-  running = true;
-  await questions.submit(request());
-  expect(writes).toHaveLength(2);
-
-  let attempts = 0;
-  const broken = new AgentQuestions({ agent: "codex", running: () => true, write: () => { attempts++; throw new Error("PTY disconnected"); } });
-  await expect(broken.submit(request())).rejects.toThrow("PTY disconnected");
-  await expect(broken.submit(request())).rejects.toThrow("PTY disconnected");
-  expect(attempts).toBe(1);
 });

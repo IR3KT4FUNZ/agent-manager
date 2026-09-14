@@ -15,11 +15,12 @@ import {
   type FileThreads,
 } from "./PrThreads";
 
+import { useReview } from "../lib/review";
 import { DiffComposer } from "./DiffComposer";
 import {
   diffComposers,
   useDiffComposer,
-  useChatFocusRequest,
+  useReviewFocusRequest,
   type SelectionAnchor,
 } from "../lib/diffComposer";
 import {
@@ -305,11 +306,12 @@ export function DiffViewer({
 
   const { drag, startSelection, extendSelection, openSelection } = useDiffSelection(sessionId, path, data);
   const composerDraft = useDiffComposer(sessionId, path);
-  const delivered = useChatFocusRequest(sessionId);
+  const delivered = useReviewFocusRequest(sessionId);
   const composer = composerDraft?.anchor ?? null;
   const { data: sessions } = useQuery({ queryKey: ["sessions"], queryFn: listSessions });
   const session = sessions?.find((item) => item.id === sessionId);
-  const agentDisabled = agentQuestionDisabledReason(session);
+  const { data: reviewState } = useReview(sessionId);
+  const agentDisabled = agentQuestionDisabledReason(session, reviewState?.selection);
   const githubDisabled = githubCommentDisabledReason({
     hasPr: Boolean(pr),
     diff: data,
@@ -359,7 +361,7 @@ export function DiffViewer({
     <div className="flex h-full min-h-0 flex-col bg-zinc-900">
       {delivered > 0 && !composerDraft && (
         <p role="status" className="border-b border-zinc-800 px-3 py-1.5 text-xs text-sky-300">
-          Question submitted to the agent terminal. Follow its response in Chat.
+          Question submitted to the review assistant. Follow its response in Walkthrough.
         </p>
       )}
       {pr && editedSinceHead && (

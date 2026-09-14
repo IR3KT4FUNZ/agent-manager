@@ -1,12 +1,9 @@
-import type { DiffSelectionContext, FileDiff, SessionInfo } from "@agent-manager/shared";
+import type { AgentSelection, DiffSelectionContext, FileDiff, SessionInfo } from "@agent-manager/shared";
 import type { SelectionAnchor } from "./diffComposer";
 
-export function agentQuestionDisabledReason(session?: Pick<SessionInfo, "agent" | "status">) {
+export function agentQuestionDisabledReason(session?: Pick<SessionInfo, "agent" | "status">, review?: AgentSelection) {
   if (!session) return "Loading agent session…";
-  if (!session.agent) return "Questions require a Claude or Codex session.";
-  if (session.status !== "running") {
-    return "This agent has exited. Open a new session to ask a question.";
-  }
+  if (!session.agent && !review?.agent) return "Choose a review agent in the Walkthrough panel first.";
   return undefined;
 }
 

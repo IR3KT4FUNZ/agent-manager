@@ -17,7 +17,7 @@ export function DiffComposer({
   const isGithubComment = draft.destination === "github";
   const disabledReason = isGithubComment ? githubDisabled : agentDisabled;
   const canSubmit = !disabledReason && !draft.pending && Boolean(draft.text.trim());
-  const submitLabel = draft.pending ? "Submitting…" : isGithubComment ? "Add to review" : "Ask agent";
+  const submitLabel = draft.pending ? "Submitting…" : isGithubComment ? "Add to review" : draft.mode === "change" ? "Request change" : "Ask agent";
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,11 +62,20 @@ export function DiffComposer({
       )}
       {!isGithubComment && (
         <p className="text-zinc-500">
-          Sends to this session’s agent terminal using its current input. The answer appears in Chat.
+          Sends to the dedicated review assistant. The answer appears in Walkthrough.
         </p>
       )}
       {disabledReason && (!isGithubComment || !githubDisabled) && (
         <p className="text-amber-300">{disabledReason}</p>
+      )}
+      {!isGithubComment && (
+        <label className="flex items-center gap-2">Action
+          <select aria-label="Review action" value={draft.mode ?? "ask"} disabled={draft.pending}
+            onChange={event => diffComposers.update(draft.id, { mode: event.target.value as "ask" | "change" })}
+            className="rounded bg-zinc-800 p-1">
+            <option value="ask">Explain code</option><option value="change">Request change</option>
+          </select>
+        </label>
       )}
       <textarea
         aria-label="Question or comment"

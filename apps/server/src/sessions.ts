@@ -1,4 +1,4 @@
-import { AgentQuestions } from "./questions";
+import { ReviewAssistant, type ReviewDependencies } from "./review/assistant";
 import { CodeNavigation } from "./navigation";
 import { spawn } from "bun-pty";
 import { randomUUID } from "node:crypto";
@@ -93,10 +93,10 @@ export class Session {
   private pty: ReturnType<typeof spawn>;
   private shell?: ShellTerminal;
   readonly navigation: CodeNavigation;
-  readonly questions: AgentQuestions;
+  readonly review: ReviewAssistant;
   private disposed = false;
 
-  constructor(resolved: ResolvedSession) {
+  constructor(resolved: ResolvedSession, reviewDependencies: ReviewDependencies = {}) {
     this.projectId = resolved.projectId;
     this.command = resolved.command;
     this.agent = resolved.agent;
@@ -116,11 +116,7 @@ export class Session {
       env: { ...process.env, TERM: "xterm-256color" } as Record<string, string>,
     });
 
-    this.questions = new AgentQuestions({
-      agent: this.agent,
-      running: () => !this.disposed && this.status === "running",
-      write: (data) => this.pty.write(data),
-    });
+    this.review = new ReviewAssistant(this.cwd, { agent: this.agent, model: this.model, reasoningEffort: this.reasoningEffort }, reviewDependencies);
 
     this.pty.onData((data: string) => {
       this.scrollback = trimScrollback(this.scrollback, data);
@@ -247,8 +243,10 @@ export class Session {
   dispose() {
     this.disposed = true;
     this.navigation.dispose();
+    const reviewStopped = this.review.dispose();
     this.shell?.dispose();
     if (this.status === "running") this.pty.kill();
+    return reviewStopped;
   }
 
   private broadcast(message: ServerMessage) {
@@ -292,8 +290,9 @@ export class SessionManager {
   async dispose(id: string): Promise<boolean> {
     const session = this.sessions.get(id);
     if (!session) return false;
-    session.dispose();
+    const stopped = session.dispose();
     this.sessions.delete(id);
+    await stopped;
     if (session.worktree) {
       await removeWorktree(session.worktree).catch((error) => {
         console.warn(`failed to remove worktree for session ${id}:`, error);

@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react";
 
-export type PanelId = "sessions" | "changes" | "diff" | "chat";
+export type PanelId = "sessions" | "changes" | "diff" | "chat" | "walkthrough";
 
-export const DEFAULT_PANEL_ORDER: readonly PanelId[] = ["sessions", "changes", "diff", "chat"];
+export const DEFAULT_PANEL_ORDER: readonly PanelId[] = ["sessions", "changes", "walkthrough", "diff", "chat"];
 
 const STORAGE_KEY = "agent-manager.panel-order";
 
 export function sanitizePanelOrder(value: unknown): PanelId[] {
-  if (
-    Array.isArray(value) &&
-    value.length === DEFAULT_PANEL_ORDER.length &&
-    DEFAULT_PANEL_ORDER.every((id) => value.includes(id))
-  ) {
-    return value as PanelId[];
+  if (Array.isArray(value)) {
+    const legacy = ["sessions", "changes", "diff", "chat"];
+    if (value.length === legacy.length && legacy.every(id => value.includes(id))) {
+      const migrated = [...value] as PanelId[];
+      migrated.splice(migrated.indexOf("diff"), 0, "walkthrough");
+      return migrated;
+    }
+    if (value.length === DEFAULT_PANEL_ORDER.length && DEFAULT_PANEL_ORDER.every(id => value.includes(id))) {
+      return value as PanelId[];
+    }
   }
   return [...DEFAULT_PANEL_ORDER];
 }

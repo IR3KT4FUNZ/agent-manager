@@ -37,6 +37,7 @@ describe("sanitizePanelOrder", () => {
     expect(sanitizePanelOrder(["chat", "sessions", "diff", "changes"])).toEqual([
       "chat",
       "sessions",
+      "walkthrough",
       "diff",
       "changes",
     ]);
