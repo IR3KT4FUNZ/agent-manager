@@ -12,6 +12,7 @@ import type {
   PrStatus,
   PrSummary,
   ProjectInfo,
+  ProjectBranches,
   SessionChanges,
   SessionInfo,
   SubmitReviewRequest,
@@ -56,6 +57,10 @@ export function closeProject(id: string): Promise<void> {
 
 export function getGithubStatus(): Promise<GithubStatus> {
   return fetch("/api/github/status").then((r) => json<GithubStatus>(r));
+}
+
+export function listProjectBranches(projectId: string): Promise<ProjectBranches> {
+  return fetch(`/api/projects/${projectId}/branches`).then((r) => json<ProjectBranches>(r));
 }
 
 export function listProjectPulls(projectId: string): Promise<PrSummary[]> {

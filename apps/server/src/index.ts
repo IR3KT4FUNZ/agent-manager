@@ -19,6 +19,7 @@ import { getFileDiff, listChanges, NoSuchChangeError } from "./changes";
 import { checkGithubStatus } from "./github";
 import { listOpenPrs, pathsChangedSince } from "./pr";
 import { codexCatalog } from "./codex";
+import { listBranches } from "./branches";
 
 const projects = new ProjectManager();
 const manager = new SessionManager();
@@ -60,6 +61,17 @@ app.get("/api/projects/:id/pulls", async (c) => {
   if (!project.repoRoot) return c.json({ error: "project is not a git repository" }, 400);
   try {
     return c.json(await listOpenPrs(project.repoRoot));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
+  }
+});
+
+app.get("/api/projects/:id/branches", async (c) => {
+  const project = projects.get(c.req.param("id"));
+  if (!project) return c.json({ error: "project not found" }, 404);
+  if (!project.repoRoot) return c.json({ error: "project is not a git repository" }, 400);
+  try {
+    return c.json(await listBranches(project.repoRoot));
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
   }
@@ -146,7 +158,8 @@ app.get("/api/sessions/:id/changes", async (c) => {
   if (!session) return c.json({ error: "session not found" }, 404);
   if (!session.worktree) return c.json({ base: "", files: [] });
   try {
-    return c.json(await listChanges(session.worktree, session.diffBase()));
+    const changes = await listChanges(session.worktree, session.diffBase());
+    return c.json({ ...changes, base: session.branchReview?.baseRef ?? changes.base });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : String(error) }, 400);
   }
@@ -160,6 +173,7 @@ app.get("/api/sessions/:id/diff", async (c) => {
   if (!path) return c.json({ error: "missing path" }, 400);
   try {
     const diff = await getFileDiff(session.worktree, path, session.diffBase());
+    if (session.branchReview) diff.base = session.branchReview.baseRef;
     const reviewPr = session.reviewAssociation();
     if (reviewPr) {
       diff.reviewHeadSha = reviewPr.headSha;

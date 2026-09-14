@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import type { AgentSelection, SessionInfo } from "@agent-manager/shared";
+import type { AgentSelection, BranchReviewRequest, SessionInfo } from "@agent-manager/shared";
 import {
   closeProject,
   createSession,
@@ -14,6 +14,7 @@ import {
 } from "../lib/api";
 import { isTauri } from "../lib/platform";
 import { OpenPrPicker } from "./OpenPrPicker";
+import { BranchReviewPicker } from "./BranchReviewPicker";
 import { AgentControls } from "./AgentControls";
 import { launchSelection, reconcileAgentPreferences, useAgentPreferences } from "../lib/agentPreferences";
 
@@ -23,6 +24,7 @@ export function Sidebar() {
   const [pickingDirectory, setPickingDirectory] = useState(false);
   const [directory, setDirectory] = useState("");
   const [prPickerFor, setPrPickerFor] = useState<string | null>(null);
+  const [branchPickerFor, setBranchPickerFor] = useState<string | null>(null);
   const { preferences, setPreferences } = useAgentPreferences();
   const [agentNotice, setAgentNotice] = useState("");
   const catalog = useQuery({
@@ -108,6 +110,14 @@ export function Sidebar() {
     },
   });
 
+  const openBranch = useMutation({
+    mutationFn: (request: { projectId: string; branchReview: BranchReviewRequest } & AgentSelection) => createSession(request),
+    onSuccess: (session) => {
+      setBranchPickerFor(null);
+      openSession(session);
+    },
+  });
+
   const close = useMutation({
     mutationFn: closeProject,
     onSuccess: () => {
@@ -127,6 +137,7 @@ export function Sidebar() {
   const error = (open.error ??
     addSession.error ??
     openPr.error ??
+    openBranch.error ??
     close.error ??
     remove.error) as Error | null;
 
@@ -212,9 +223,23 @@ export function Sidebar() {
                 <span className="flex-1" />
                 {project.isRepo && (
                   <button
-                    onClick={() =>
-                      setPrPickerFor((current) => (current === project.id ? null : project.id))
-                    }
+                    onClick={() => {
+                      setPrPickerFor(null);
+                      setBranchPickerFor((current) => current === project.id ? null : project.id);
+                    }}
+                    disabled={openBranch.isPending || !canLaunch}
+                    title="Review a branch diff in this project"
+                    className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] leading-none font-semibold disabled:opacity-50 ${branchPickerFor === project.id ? "border-zinc-600 bg-zinc-800 text-zinc-100" : "border-zinc-700 text-zinc-400 hover:text-zinc-100"}`}
+                  >
+                    Diff
+                  </button>
+                )}
+                {project.isRepo && (
+                  <button
+                    onClick={() => {
+                      setBranchPickerFor(null);
+                      setPrPickerFor((current) => (current === project.id ? null : project.id));
+                    }}
                     disabled={!githubReady || openPr.isPending || !canLaunch}
                     className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] leading-none font-semibold transition-colors disabled:border-zinc-800 disabled:text-zinc-700 ${
                       prPickerFor === project.id
@@ -253,6 +278,16 @@ export function Sidebar() {
                   pending={openPr.isPending || !canLaunch}
                   onOpen={(prNumber) => { if (canLaunch) openPr.mutate({ projectId: project.id, prNumber, ...selection() }); }}
                   onCancel={() => setPrPickerFor(null)}
+                />
+              )}
+
+              {branchPickerFor === project.id && (
+                <BranchReviewPicker
+                  key={project.id}
+                  projectId={project.id}
+                  pending={openBranch.isPending || !canLaunch}
+                  onOpen={(branchReview) => { if (canLaunch) openBranch.mutate({ projectId: project.id, branchReview, ...selection() }); }}
+                  onCancel={() => setBranchPickerFor(null)}
                 />
               )}
 

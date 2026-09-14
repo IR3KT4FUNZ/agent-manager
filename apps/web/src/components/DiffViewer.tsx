@@ -364,6 +364,7 @@ export function DiffViewer({
     composerContent: composerDraft && (
       <DiffComposer
         draft={composerDraft}
+        hasPr={Boolean(pr)}
         githubDisabled={githubDisabled}
         agentDisabled={agentDisabled}
         onReview={addReviewComment}

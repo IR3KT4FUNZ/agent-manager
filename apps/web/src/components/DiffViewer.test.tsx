@@ -69,7 +69,8 @@ test("accessible gutter selection opens a fixed snapshot and restores the unsent
   expect(gutter.closest('[aria-hidden="true"]')).toBeNull();
   await act(() => gutter.click());
   expect(container.textContent).toContain("previous.ts · old side · lines 2–2");
-  expect(container.querySelector<HTMLOptionElement>('option[value="github"]')?.disabled).toBe(true);
+  expect(container.querySelector('option[value="github"]')).toBeNull();
+  expect(container.textContent).not.toContain("GitHub");
   const draft = diffComposers.get(sessionId, diff.path)!;
   await act(() => diffComposers.update(draft.id, { text: "Explain old code" }));
   await act(() => root.render(null));

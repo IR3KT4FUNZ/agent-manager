@@ -50,6 +50,23 @@ export interface SessionInfo extends AgentSelection {
   createdAt: string;
   worktree?: WorktreeInfo;
   pr?: PrAssociation;
+  branchReview?: BranchReview;
+}
+
+export interface BranchReviewRequest {
+  headRef: string;
+  baseRef: string;
+}
+
+export interface BranchReview extends BranchReviewRequest {
+  headSha: string;
+  baseSha: string;
+}
+
+export interface ProjectBranches {
+  branches: string[];
+  currentBranch: string;
+  defaultBase: string;
 }
 
 export interface CreateSessionRequest extends AgentSelection {
@@ -58,6 +75,7 @@ export interface CreateSessionRequest extends AgentSelection {
   args?: string[];
   title?: string;
   prNumber?: string | number;
+  branchReview?: BranchReviewRequest;
 }
 
 export type ChangeStatus = "added" | "modified" | "deleted" | "renamed" | "untracked";

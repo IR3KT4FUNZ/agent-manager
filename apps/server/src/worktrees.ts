@@ -88,13 +88,13 @@ export async function createWorktreeAt(
   throw new Error("Failed to create git worktree: could not find a free branch name");
 }
 
-export function createWorktree(repoRoot: string): Promise<WorktreeInfo> {
+export function createWorktree(repoRoot: string, startRef = "HEAD"): Promise<WorktreeInfo> {
   return createWorktreeAt(repoRoot, {
     branchFor: (attempt) => {
       const base = generateWorkspaceName();
       return attempt === 0 ? base : `${base}-${attempt + 1}`;
     },
-    startRef: "HEAD",
+    startRef,
   });
 }
 

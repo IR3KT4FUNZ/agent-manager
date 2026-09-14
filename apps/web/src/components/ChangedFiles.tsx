@@ -65,7 +65,6 @@ export function ChangedFiles({
   const files = data?.files ?? [];
   const isGit = data ? data.base !== "" : true;
 
-  // Opening a pull request should land on its diff, not on an empty panel.
   const autoSelected = useRef(false);
   useEffect(() => {
     const first = files[0];

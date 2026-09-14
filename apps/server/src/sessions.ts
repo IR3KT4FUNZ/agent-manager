@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import type {
   CreateSessionRequest,
+  BranchReview,
   PrAssociation,
   PrReviewThread,
   PrStatus,
@@ -16,6 +17,7 @@ import type {
 } from "@agent-manager/shared";
 import type { Project } from "./projects";
 import { resolveAgentLaunch, type AgentLaunch } from "./agents";
+import { resolveBranchReview } from "./branches";
 import {
   checkoutPrWorktree,
   loadPrStatus,
@@ -36,6 +38,7 @@ interface ResolvedSession extends AgentLaunch {
   title: string;
   worktree?: WorktreeInfo;
   pr?: PrAssociation;
+  branchReview?: BranchReview;
 }
 
 async function resolveSession(
@@ -46,6 +49,22 @@ async function resolveSession(
   const launch = await resolveLaunch(request, project.root);
   const { command } = launch;
   const base = { projectId: project.id, ...launch };
+
+  if (request.branchReview !== undefined) {
+    if (request.prNumber !== undefined && String(request.prNumber).trim() !== "") {
+      throw new Error("Choose either a pull request or a branch diff to review.");
+    }
+    if (!project.repoRoot) throw new Error("Branch diffs can only be reviewed in a git repository.");
+    const branchReview = await resolveBranchReview(project.repoRoot, request.branchReview);
+    const worktree = await createWorktree(project.repoRoot, branchReview.headSha);
+    return {
+      ...base,
+      cwd: worktree.path,
+      title: request.title ?? `${branchReview.headRef} vs ${branchReview.baseRef}`,
+      worktree,
+      branchReview,
+    };
+  }
 
   if (request.prNumber !== undefined && String(request.prNumber).trim() !== "") {
     if (!project.repoRoot) {
@@ -85,6 +104,7 @@ export class Session {
   readonly title: string;
   readonly worktree?: WorktreeInfo;
   pr?: PrAssociation;
+  readonly branchReview?: BranchReview;
   status: "running" | "exited" = "running";
   exitCode: number | null = null;
 
@@ -109,6 +129,7 @@ export class Session {
     this.title = resolved.title;
     this.worktree = resolved.worktree;
     this.pr = resolved.pr;
+    this.branchReview = resolved.branchReview;
 
     this.pty = spawn(resolved.executable ?? this.command, resolved.args, {
       name: "xterm-256color",
@@ -149,21 +170,21 @@ export class Session {
       createdAt: this.createdAt,
       worktree: this.worktree,
       pr: this.pr,
+      branchReview: this.branchReview,
     };
   }
 
-  // PR sessions diff against the PR's base branch, so the changed files match
-  // what GitHub shows under "Files changed".
   diffBase(): string | undefined {
-    return this.pr ? `origin/${this.pr.baseRefName}` : undefined;
+    return this.branchReview?.baseSha ?? (this.pr ? `origin/${this.pr.baseRefName}` : undefined);
   }
 
   reviewAssociation(): PrAssociation | null {
+    if (this.branchReview) return null;
     return this.pr ?? this.prLookup?.pr ?? null;
   }
 
   async prStatus(): Promise<PrStatus> {
-    if (!this.worktree) {
+    if (!this.worktree || this.branchReview) {
       return {
         pr: null,
         localDirty: false,
@@ -259,7 +280,10 @@ export class Session {
 }
 
 export class SessionManager {
-  constructor(private readonly resolveLaunch = resolveAgentLaunch) {}
+  constructor(
+    private readonly resolveLaunch = resolveAgentLaunch,
+    private readonly reviewDependencies: ReviewDependencies = {},
+  ) {}
 
   private sessions = new Map<string, Session>();
 
@@ -267,7 +291,7 @@ export class SessionManager {
     const resolved = await resolveSession(project, request, this.resolveLaunch);
     let session: Session;
     try {
-      session = new Session(resolved);
+      session = new Session(resolved, this.reviewDependencies);
     } catch (error) {
       if (resolved.worktree) await discardWorktree(resolved.worktree).catch(() => {});
       throw error;
